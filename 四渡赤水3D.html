@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四渡赤水 · 1935 | 三维真实地形动画</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --gold:#d8b26a; --gold-hi:#f0dca6; --gold-dim:rgba(216,178,106,.35);
+    --red:#ff4a3d; --blue:#7fa3c0;
+    --ink:#0a0e14; --text:#e9e4d6; --text-dim:#9aa5ae;
+    --card:linear-gradient(160deg, rgba(20,28,40,.90), rgba(10,15,22,.88));
+    --kai:"KaiTi","STKaiti","BiauKai","DFKai-SB","楷体",serif;
+  }
+  html,body{height:100%;}
+  body{ background:#070a0f; color:var(--text); font-family:var(--kai); overflow:hidden; }
+  #glwrap{position:fixed; inset:0;}
+  #gl{width:100%; height:100%; display:block;}
+  #fxCanvas{position:fixed; inset:0; pointer-events:none; opacity:.5;}
+  #vignette{position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(120% 95% at 50% 40%, transparent 58%, rgba(2,4,7,.5) 100%);}
+  .hud{position:fixed; z-index:5;}
+
+  /* 标题 */
+  #titleBlock{top:20px; left:24px; pointer-events:none;}
+  .title-row{display:flex; align-items:flex-start; gap:12px;}
+  .main-title{
+    font-size:40px; line-height:1; letter-spacing:9px;
+    background:linear-gradient(180deg,#f7e8bd 0%, #e3c07e 45%, #b98f4a 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 2px 10px rgba(216,178,106,.25));
+  }
+  .seal{
+    width:52px; height:52px; margin-top:2px; flex:0 0 auto;
+    background:linear-gradient(160deg,#c33b2f,#a02722);
+    border:2px solid #e06055; outline:1px solid rgba(224,96,85,.5); outline-offset:2px;
+    border-radius:5px; transform:rotate(-5deg);
+    display:grid; grid-template-columns:1fr 1fr; place-items:center;
+    box-shadow:0 4px 14px rgba(0,0,0,.5), inset 0 0 8px rgba(0,0,0,.25);
+  }
+  .seal span{color:#ffe9dc; font-size:17px; line-height:1;}
+  .subtitle{margin-top:9px; font-size:12.5px; letter-spacing:2px; color:#c8c0ac;}
+  .subtitle b{color:var(--gold-hi); font-weight:500;}
+  .tagline{margin-top:4px; font-size:11px; letter-spacing:1.5px; color:var(--text-dim);}
+
+  /* 数据牌 */
+  #stats{top:20px; right:24px; display:flex; flex-direction:column; gap:7px; pointer-events:none;}
+  .stat{
+    min-width:168px; padding:7px 13px; background:var(--card);
+    border:1px solid rgba(255,255,255,.06); border-left:2px solid var(--gold-dim);
+    border-radius:8px; backdrop-filter:blur(6px); text-align:right;
+  }
+  .stat .s-label{font-size:10.5px; letter-spacing:2px; color:var(--text-dim); font-family:"Microsoft YaHei","PingFang SC",sans-serif;}
+  .stat .s-value{font-size:18px; margin-top:2px; letter-spacing:1px;}
+  .stat.red .s-value{color:#ff8d7e;} .stat.blue .s-value{color:#9fc3de;} .stat.gold .s-value{color:var(--gold-hi);}
+
+  /* 小兵图标阵列（兵力具象化，不用数字） */
+  .mini-soldier{
+    display:inline-block; width:9px; height:15px; margin:0 2px 2px 0; vertical-align:-3px;
+    border-radius:3px 3px 1px 1px; background:linear-gradient(180deg,#f2f6fb 0 34%,#dbe6f2 34% 62%,#7e8fa3 62% 100%);
+    box-shadow:0 0 4px rgba(150,200,255,.45);
+  }
+  .mini-soldier.red{
+    background:linear-gradient(180deg,#ff6a5c 0 34%,#e0342a 34% 62%,#8f1408 62% 100%);
+    box-shadow:0 0 5px rgba(255,80,60,.6);
+  }
+  .mini-cap{font-size:10px; color:var(--text-dim); margin-left:6px; letter-spacing:1px;}
+  .s-value.sv-row{text-align:right;}
+  /* 小兵方阵容器：横向排列成排 */
+  .mini-row{display:flex; flex-wrap:wrap; gap:2px; justify-content:flex-end; max-width:236px; margin-top:4px;}
+  .mini-row .mini-soldier{margin:0;}
+  .mini-row .mini-cap{flex-basis:100%; text-align:right; margin:2px 0 0; }
+  .fc-num .mini-row{max-width:none; justify-content:flex-start;}
+
+  /* 讲解卡 */
+  #narration{
+    left:24px; bottom:88px; width:min(388px, calc(100vw - 48px));
+    background:var(--card); border:1px solid rgba(255,255,255,.07);
+    border-radius:12px; padding:15px 17px 14px; backdrop-filter:blur(8px);
+    box-shadow:0 14px 40px rgba(0,0,0,.55); max-height:42vh; overflow-y:auto;
+    scrollbar-width:thin; scrollbar-color:rgba(216,178,106,.3) transparent;
+    transition:transform .75s cubic-bezier(.25,.7,.3,1);
+  }
+  #narration::before{
+    content:""; position:absolute; top:0; left:14px; right:14px; height:2px;
+    background:linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+  .n-inner{transition:opacity .45s, transform .45s;}
+  .n-inner.out{opacity:0; transform:translateY(10px);}
+  .n-dates{font-size:11px; letter-spacing:2.5px; color:var(--gold); font-family:"Microsoft YaHei",sans-serif;}
+  .n-title{font-size:22px; letter-spacing:3px; margin:5px 0 8px; color:#f2e7cd;}
+  .n-body p{font-size:12.5px; line-height:1.8; color:#d9d3c3; margin-bottom:6px; text-align:justify; font-family:"Microsoft YaHei","PingFang SC",sans-serif;}
+  .n-body p::before{content:"◆"; color:var(--gold-dim); font-size:8px; margin-right:7px; vertical-align:2px;}
+  .n-quote{
+    margin-top:9px; padding:6px 11px; border-left:2px solid var(--gold);
+    font-size:14px; line-height:1.7; color:#e8d6a8;
+    background:linear-gradient(90deg, rgba(216,178,106,.10), transparent 80%); border-radius:0 6px 6px 0;
+  }
+  .n-enemy{margin-top:8px; font-size:11.5px; letter-spacing:.5px; color:#c2ccd6; line-height:1.6; font-family:"Microsoft YaHei",sans-serif;}
+  .n-enemy::before{content:"⚑ 敌军动向  "; color:#b9c6d2; letter-spacing:2px;}
+
+  /* 控制条 */
+  #controls{
+    left:50%; transform:translateX(-50%); bottom:16px; width:min(1040px, calc(100vw - 36px));
+    background:var(--card); border:1px solid rgba(255,255,255,.07); border-radius:12px;
+    padding:8px 13px 9px; backdrop-filter:blur(8px); box-shadow:0 12px 32px rgba(0,0,0,.5);
+    display:flex; flex-direction:column; gap:7px;
+  }
+  #progressTrack{display:flex; height:5px; gap:2px; cursor:pointer;}
+  #progressTrack .seg{flex:1 1 0; position:relative; background:rgba(255,255,255,.09); border-radius:3px; overflow:hidden;}
+  #progressTrack .seg i{position:absolute; inset:0; width:0; background:linear-gradient(90deg,#a5844b,var(--gold-hi)); display:block;}
+  .ctrl-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .btn{
+    font-size:13.5px; letter-spacing:2px; color:var(--gold-hi);
+    background:transparent; border:1px solid var(--gold-dim); border-radius:7px;
+    padding:4px 12px; cursor:pointer; transition:.25s;
+  }
+  .btn:hover{background:rgba(216,178,106,.14); border-color:var(--gold);}
+  .btn.play{width:70px;}
+  .btn.follow{color:#9fc3de; border-color:rgba(185,198,210,.4);}
+  .btn.follow.on{color:#0e1c28; background:linear-gradient(160deg,#9fc3de,#5c86a8); border-color:#9fc3de;}
+  .chips{display:flex; gap:5px; flex:1 1 auto; flex-wrap:wrap; justify-content:center;}
+  .chip{
+    font-size:11.5px; letter-spacing:1px; color:#c5bfae; background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.09); border-radius:20px; padding:3px 10px; cursor:pointer;
+    transition:.22s; white-space:nowrap;
+  }
+  .chip:hover{color:var(--gold-hi); border-color:var(--gold-dim);}
+  .chip.active{background:linear-gradient(160deg,#e6c887,#c39a53); color:#241a08; border-color:#e6c887; font-weight:700;}
+  .chip .no{margin-right:2px;}
+  #dateReadout{font-size:13px; letter-spacing:1px; color:var(--gold-hi); min-width:104px; text-align:right;}
+
+  /* 图例 */
+  #legend{
+    right:24px; bottom:88px; background:var(--card); border:1px solid rgba(255,255,255,.07);
+    border-radius:10px; padding:9px 12px; font-size:11px; line-height:1.9; color:#c5bfae;
+    pointer-events:none; backdrop-filter:blur(6px); font-family:"Microsoft YaHei",sans-serif;
+    transition:transform .75s cubic-bezier(.25,.7,.3,1);
+  }
+  #legend .lg-title{letter-spacing:3px; color:var(--gold-hi); font-size:12px; margin-bottom:2px; font-family:var(--kai);}
+  #legend i{display:inline-block; width:17px; margin-right:7px; vertical-align:-2px;}
+  .sw-route{height:3px; background:linear-gradient(90deg,#ff6a55,#c9352a); border-radius:2px; box-shadow:0 0 6px rgba(255,74,61,.8);}
+  .sw-enemy{height:0; border-top:2px dashed #e8f0f7;}
+  .sw-flag{width:11px!important;height:11px; background:#e6edf5; clip-path:polygon(0 0,100% 28%,0 56%); border-left:2px solid #eef4fa;}
+  .sw-star{width:11px!important;height:11px; background:#ff5a48; clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);}
+  .sw-cross{width:11px!important;height:11px; border:2px solid var(--gold); border-radius:50%; color:var(--gold); font-size:8px; text-align:center; line-height:8px;}
+  .sw-soldier{width:9px;height:12px;border-radius:3px 3px 1px 1px;background:#f2f6fb;box-shadow:0 0 0 1.5px #46698c;position:relative;margin-top:5px;}
+  .sw-soldier::before{content:"";position:absolute;top:-5px;left:1.5px;width:6px;height:6px;border-radius:50%;background:#46698c;}
+  .sw-soldier.red{background:#ff3b30;box-shadow:0 0 0 1.5px #8f1408;}
+  .sw-soldier.red::before{background:#8f1408;}
+
+  #chinaInset{
+    top:300px; right:24px; width:178px;
+    background:var(--card); border:1px solid rgba(255,255,255,.07); border-radius:10px;
+    padding:7px 8px 5px; pointer-events:none; backdrop-filter:blur(6px);
+  }
+  #chinaInset .ci-title{font-size:10px; letter-spacing:4px; color:#8fa0b2; text-align:center; font-family:"Microsoft YaHei",sans-serif; margin-bottom:3px;}
+
+  /* 渡河大字 */
+  #flash{position:fixed; top:15%; left:0; right:0; text-align:center; pointer-events:none; z-index:6;}
+  #flash .f-main{
+    font-size:42px; letter-spacing:14px; color:var(--gold-hi);
+    text-shadow:0 0 24px rgba(216,178,106,.55), 0 3px 8px rgba(0,0,0,.6);
+    opacity:0; transform:scale(.86);
+  }
+  #flash .f-sub{
+    font-size:16px; letter-spacing:6px; color:#ffd9b0; margin-top:8px;
+    text-shadow:0 0 14px rgba(255,74,61,.6); opacity:0; font-family:"Microsoft YaHei",sans-serif;
+  }
+  #flash.on .f-main{animation:flashIn 2.4s ease both;}
+  #flash.on .f-sub{animation:flashIn 2.4s .12s ease both;}
+  @keyframes flashIn{0%{opacity:0; transform:scale(.86);} 12%{opacity:1; transform:scale(1);} 75%{opacity:1;} 100%{opacity:0; transform:scale(1.03);}}
+
+  /* 遮罩层 */
+  .overlay{
+    position:fixed; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(900px 640px at 50% 42%, rgba(22,31,44,.92), rgba(5,8,12,.96));
+    backdrop-filter:blur(4px); transition:opacity .9s; padding:20px;
+  }
+  .overlay.hide{opacity:0; pointer-events:none;}
+  .ov-title{
+    font-size:clamp(52px, 8.5vw, 92px); letter-spacing:24px; text-indent:24px;
+    background:linear-gradient(180deg,#f9ecca,#e0bb75 55%,#a87f42);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 4px 22px rgba(216,178,106,.3));
+  }
+  .ov-sub{margin-top:14px; font-size:14px; letter-spacing:5px; color:#c8c0ac;}
+  .ov-quote{margin-top:22px; font-size:15px; line-height:2.05; letter-spacing:3px; color:#e8d6a8; opacity:.9;}
+  .force-compare{margin-top:30px; width:min(640px, 92vw);}
+  .fc-row{display:flex; align-items:center; gap:12px; margin:8px 0; font-size:12.5px; letter-spacing:2px; flex-wrap:wrap;}
+  .fc-name{width:110px; text-align:right; color:#c5bfae; flex:none;}
+  .fc-bar-wrap{flex:1; height:13px; background:rgba(255,255,255,.07); border-radius:7px; overflow:hidden;}
+  .fc-bar{height:100%; width:0; border-radius:7px; transition:width 1.6s cubic-bezier(.2,.7,.3,1);}
+  .fc-bar.red{background:linear-gradient(90deg,#ff8d7e,#c9352a); box-shadow:0 0 12px rgba(255,74,61,.6);}
+  .fc-bar.blue{background:linear-gradient(90deg,#9fc3de,#4d7ea6);}
+  .fc-num{flex:none; color:var(--gold-hi); font-size:12px; letter-spacing:1px;}
+  .ov-btn{
+    margin-top:32px; font-size:18px; letter-spacing:9px; text-indent:9px;
+    color:#241a08; background:linear-gradient(160deg,#eed399,#c39a53); border:none; border-radius:9px;
+    padding:12px 42px; cursor:pointer; box-shadow:0 6px 26px rgba(216,178,106,.35); transition:.3s;
+  }
+  .ov-btn:hover{transform:translateY(-2px); box-shadow:0 10px 32px rgba(216,178,106,.5);}
+  .ov-foot{margin-top:24px; font-size:11px; letter-spacing:2px; color:var(--text-dim); font-family:"Microsoft YaHei",sans-serif;}
+
+  /* 加载层 */
+  #loading .ld-title{font-size:26px; letter-spacing:8px; color:var(--gold-hi);}
+  #loading .ld-status{margin-top:14px; font-size:12px; letter-spacing:2px; color:#9aa5ae; font-family:"Microsoft YaHei",sans-serif; min-height:18px;}
+  .ld-bar{margin-top:16px; width:min(360px,80vw); height:6px; background:rgba(255,255,255,.08); border-radius:3px; overflow:hidden;}
+  .ld-bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,#a5844b,var(--gold-hi)); transition:width .3s;}
+
+  @media (max-width:980px){
+    .main-title{font-size:28px; letter-spacing:5px;}
+    .seal{width:40px;height:40px;} .seal span{font-size:13px;}
+    #stats,#legend,#chinaInset{display:none;}
+    #narration{bottom:128px; max-height:30vh;}
+    .chip{padding:2px 7px; font-size:10.5px;}
+    #dateReadout{display:none;}
+    .ov-title{letter-spacing:12px; text-indent:12px;}
+  }
+</style>
+</head>
+<body>
+<div id="glwrap"><canvas id="gl"></canvas></div>
+<canvas id="fxCanvas"></canvas>
+<div id="vignette"></div>
+
+<div class="hud" id="titleBlock">
+  <div class="title-row">
+    <div class="main-title">四渡赤水</div>
+    <div class="seal"><span>得</span><span>意</span><span>之</span><span>笔</span></div>
+  </div>
+  <div class="subtitle"><b>1935年1月—5月</b> · 三万红军与四十万大军的生死周旋</div>
+  <div class="tagline">真实DEM地形 · 真实经纬坐标 · 河宽示意 · 三维沙盘推演</div>
+</div>
+
+<div class="hud" id="stats">
+  <div class="stat red"><div class="s-label">中央红军 · 遵义会议时</div><div class="s-value" id="stRed"></div></div>
+  <div class="stat blue"><div class="s-label">国民党围剿军</div><div class="s-value" id="stBlue"></div></div>
+  <div class="stat gold"><div class="s-label">遵义战役战果</div><div class="s-value">歼灭和击溃敌军 2 师又 8 团</div></div>
+  <div class="stat gold"><div class="s-label">巧渡金沙江</div><div class="s-value">6 只木船 · 7 昼夜</div></div>
+</div>
+
+<!-- 中国战区定位 -->
+<div class="hud" id="chinaInset">
+  <div class="ci-title">中国 · 战区定位</div>
+  <canvas id="chinaCanvas" width="356" height="292" style="width:100%;height:auto;display:block;"></canvas>
+</div>
+
+<div class="hud" id="narration"><div class="n-inner" id="nInner"></div></div>
+
+<div class="hud" id="legend">
+  <div class="lg-title">图 例</div>
+  <div><i class="sw-route"></i>红军主力行进路线</div>
+  <div><i class="sw-enemy"></i>国民党军行进路线</div>
+  <div><i class="sw-flag"></i>国民党军纵队</div>
+  <div><i class="sw-star"></i>红军主力当前位置</div>
+  <div><i class="sw-cross">渡</i>渡河点（一至四渡）</div>
+  <div><i style="width:22px;height:7px;border-radius:3px;background:linear-gradient(90deg,#2f7fb8,#4d8fb5);"></i>河流水面（河宽示意）</div>
+  <div><i class="sw-soldier red"></i><i class="sw-soldier" style="margin-left:2px"></i> 小兵方阵：1 个小兵 ≈ 5 千人</div>
+  <div style="opacity:.8">红＝红军 · 白＝国民党军</div>
+  <div style="opacity:.72">"40万"为全国范围围剿总投入，黔北一线仅其中一部</div>
+</div>
+
+<div class="hud" id="controls">
+  <div id="progressTrack" aria-label="章节进度"></div>
+  <div class="ctrl-row">
+    <button class="btn play" id="playBtn">暂 停</button>
+    <button class="btn" id="speedBtn">速度 1×</button>
+    <button class="btn follow on" id="followBtn">上帝视角</button>
+    <div class="chips" id="chips"></div>
+    <div id="dateReadout">1935.1.15</div>
+  </div>
+</div>
+
+<div id="flash"><div class="f-main"></div><div class="f-sub"></div></div>
+
+<div class="overlay hide" id="loading">
+  <div class="ld-title">构建三维战场</div>
+  <div class="ld-status" id="ldStatus">正在加载真实地形高程数据…</div>
+  <div class="ld-bar"><i id="ldBar"></i></div>
+</div>
+
+<div class="overlay hide" id="cover">
+  <div class="ov-title">四渡赤水</div>
+  <div class="ov-sub">一九三五年 · 赤水河畔 · 三万红军的绝地周旋</div>
+  <div class="force-compare">
+    <div class="fc-row"><div class="fc-name">中央红军</div><div class="fc-bar-wrap"><div class="fc-bar red" id="barRed"></div></div><div class="fc-num" id="fcRed"></div></div>
+    <div class="fc-row"><div class="fc-name">国民党军</div><div class="fc-bar-wrap"><div class="fc-bar blue" id="barBlue"></div></div><div class="fc-num" id="fcBlue"></div></div>
+  </div>
+  <div class="ov-quote">"战士双脚走天下，四渡赤水出奇兵。"<br>"……调虎离山袭金沙，毛主席用兵真如神。"<br><span style="font-size:12px;letter-spacing:3px;opacity:.65;">—— 《长征组歌》</span></div>
+  <button class="ov-btn" id="startBtn">开 始 演 示</button>
+  <div class="ov-foot">兵力规模以小兵方阵具象呈现：1 个小兵 ≈ 5 千人<br>片中兵力数字为史载约数，各档案、方志记载略有出入；"40 万"系全国范围围剿总投入（含长江防线与地方团练），黔北一线仅其中一部<br>史载：遵义会议时中央红军约 3.7 万 → 扎西整编 3 万余 → 渡金沙江 3 万余<br>在线加载SRTM真实卫星高程（离线自动切换示意地形）· 城市渡口按真实经纬度定位 · 山体纵向×2.2 · 河宽示意</div>
+</div>
+
+<div class="overlay hide" id="ending">
+  <div class="ov-title" style="font-size:clamp(32px,5vw,50px); letter-spacing:13px; text-indent:13px;">跳出重围</div>
+  <div class="ov-quote">
+    横断山，路难行。敌重兵，压黔境。<br>
+    战士双脚走天下，四渡赤水出奇兵。<br>
+    乌江天险重飞渡，兵临贵阳逼昆明。<br>
+    敌人弃甲丢烟枪，我军乘胜赶路程。<br>
+    调虎离山袭金沙，毛主席用兵真如神。<br>
+    <span style="font-size:12px;letter-spacing:3px;opacity:.65;">—— 肖华《长征组歌·四渡赤水出奇兵》</span>
+  </div>
+  <div class="ov-quote" style="font-size:14px; color:#e8d6a8;">据纪实回忆：一九六〇年蒙哥马利访华盛赞三大战役，<br>毛泽东却说：<span style="color:#f0dca6;font-size:16.5px;">"四渡赤水才是我的得意之笔。"</span></div>
+  <button class="ov-btn" id="replayBtn">重 新 播 放</button>
+</div>
+
+<script>
+window.__bootError = "";
+window.addEventListener("error", function(e){
+  window.__bootError = String(e.message || e);
+  var s = document.getElementById("ldStatus");
+  if(s) s.textContent = "脚本加载失败 — " + window.__bootError;
+  var ld = document.getElementById("loading");
+  if(ld && !ld.classList.contains("hide")) return; // 已在加载中则只更新文案
+  if(ld){ ld.classList.remove("hide"); }
+  var cv2 = document.getElementById("cover");
+  if(cv2) cv2.classList.add("hide");
+});
+</script>
+<script src="libs/three.min.js"></script>
+<script src="libs/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+if(typeof THREE === "undefined"){
+  var s0=document.getElementById("ldStatus");
+  if(s0) s0.textContent="本地 libs/three.min.js 加载失败，请确认 libs 目录与页面同处一个文件夹。";
+  var l0=document.getElementById("loading"); if(l0) l0.classList.remove("hide");
+  throw new Error("THREE missing");
+}
+
+/* ================================================================
+   四渡赤水 · 三维真实地形动画
+   - 地形：AWS Open Data（Terrarium DEM，zoom 9 真实高程）
+   - 坐标：全部为真实经纬度，等距投影为世界坐标（单位 km）
+   - 国民党军：每章多路纵队实时机动（蓝旗+虚线轨迹）
+   ================================================================ */
+const $ = s => document.querySelector(s);
+const ldStatus = $("#ldStatus"), ldBar = $("#ldBar");
+
+/* ---------- 地理窗口与投影 ---------- */
+/* DEM 覆盖范围：覆盖全部章节镜头视野（含巧渡金沙江、威逼昆明一带），
+   避免镜头拉远时露出 DEM 边界形成矩形断崖 */
+const LONW=99.2, LONE=111.5, LATN=32.6, LATS=22.4;
+const LON0=(LONW+LONE)/2, LAT0=(LATN+LATS)/2;
+const KX=111.32*Math.cos(LAT0*Math.PI/180), KZ=110.97;
+const EXAG=2.2;
+const W_KM=(LONE-LONW)*KX, H_KM=(LATN-LATS)*KZ;
+function lonLat2xy(lon,lat){ return [ (lon-LON0)*KX, -(lat-LAT0)*KZ ]; }
+
+/* ---------- 关键坐标（真实经纬度） ---------- */
+const C = {
+  zunyi:[106.93,27.73], loushan:[106.87,28.01], tongzi:[106.83,28.14], songkan:[106.86,28.42],
+  yaxi:[106.63,27.70], gouba:[106.28,27.68], luban:[106.20,27.74], renhuai:[106.40,27.80],
+  maotai:[106.38,27.76], jinsha:[106.22,27.46], qianxi:[106.03,27.02], dading:[105.61,27.14],
+  bijie:[105.28,27.30], zhenxiong:[104.87,27.44], zhaxi:[105.05,27.85], xuyong:[105.44,28.17],
+  gulin:[105.81,28.04], luzhou:[105.44,28.88], yibin:[104.64,28.77], chongqing:[106.55,29.56],
+  chishui:[105.70,28.59], yuanhou:[105.92,28.38], tucheng:[105.99,28.28], xishui:[106.20,28.33],
+  taiping:[105.85,28.04], erlang:[105.99,28.10], xifeng:[106.74,27.09], xiuwen:[106.60,26.84],
+  guiyang:[106.69,26.60], longli:[106.98,26.45], changshun:[106.44,26.02], ziyun:[106.09,25.75],
+  xingren:[105.19,25.73], qujing:[103.80,25.50], songming:[103.04,25.34], kunming:[102.83,24.88],
+  xundian:[102.66,25.56], zhaotong:[102.85,27.34], huili:[102.25,26.66], jiaoping:[102.68,26.52],
+  meitan:[107.48,27.76], qinggangpo:[106.05,28.27], cross1:[105.96,28.31], cross3:[106.34,27.85],
+  wujiangCross:[106.48,27.16], xichang:[102.26,27.90]
+};
+
+/* ---------- 河流（真实走向经纬度，wKm=水面显示宽度km·示意放大，flow=流速） ---------- */
+const RIVERS = [
+  { name:"金沙江", wKm:3.2, flow:1.15, labelAt:[102.20,26.36], pts:[
+    [102.05,24.70],[101.55,24.95],[101.05,25.30],[100.62,25.85],[100.35,26.50],[100.25,27.20],
+    [100.30,27.90],[100.55,27.55],[100.80,27.22],[101.05,26.92],[101.30,26.72],[101.55,26.58],
+    [101.80,26.50],[102.05,26.42],[102.30,26.40],[102.55,26.44],[102.68,26.52],[102.86,26.62],
+    [102.95,26.40],[102.98,26.70],[103.00,27.02],[103.15,27.30],[103.35,27.65],[103.55,27.95],
+    [103.80,28.20],[104.10,28.45],[104.35,28.62],[104.64,28.77]]},
+  { name:"长　江", wKm:4.8, flow:0.55, labelAt:[106.02,29.16], pts:[
+    [104.64,28.77],[104.95,28.80],[105.25,28.84],[105.44,28.88],[105.65,28.95],[105.90,29.10],
+    [106.10,29.22],[106.30,29.30],[106.45,29.42],[106.55,29.56],[106.75,29.72],[107.00,29.85],
+    [107.40,30.00],[107.90,30.22],[108.50,30.35],[109.50,30.52],[110.60,30.62],[111.80,30.68],
+    [113.00,30.62],[114.30,30.55]]},
+  /* 赤水河路径：南段经仁怀、茅台（渡口须落在河道线上），北段经二郎滩、太平渡、土城、元厚 */
+  { name:"赤水河", wKm:1.7, flow:1.3, labelAt:[105.86,28.44], pts:[
+    [104.82,27.30],[105.00,27.38],[105.18,27.42],[105.38,27.50],[105.58,27.62],[105.80,27.68],
+    [106.02,27.72],[106.20,27.76],[106.38,27.76],[106.44,27.86],[106.30,27.92],[106.14,27.96],
+    [106.05,28.02],[106.03,28.14],[105.92,28.16],[105.85,28.04],[105.93,28.00],[105.90,28.06],
+    [105.96,28.22],[105.99,28.28],[105.95,28.33],[105.92,28.38],
+    [105.86,28.46],[105.78,28.53],[105.70,28.59],[105.72,28.66],[105.78,28.72],[105.83,28.81]]},
+  { name:"乌　江", wKm:2.4, flow:0.95, labelAt:[106.60,27.26], pts:[
+    [105.30,26.80],[105.60,26.88],[105.87,26.96],[106.10,27.06],[106.32,27.15],[106.55,27.20],
+    [106.80,27.32],[107.00,27.44],[107.30,27.68],[107.65,27.95],[107.95,28.30],[108.18,28.70],
+    [108.22,29.10],[108.00,29.45],[107.62,29.65],[107.42,29.72]]},
+];
+/* 山脉脊线（用于备用地形与标注） */
+const RIDGES = [
+  { name:"大娄山", amp:0.75, labelAt:[107.05,28.24], pts:[[105.70,27.85],[106.10,27.95],[106.50,28.02],[106.87,28.01],[107.20,28.15],[107.55,28.35]]},
+  { name:"乌蒙山", amp:1.35, labelAt:[104.55,26.55], pts:[[103.60,25.60],[104.00,25.95],[104.40,26.35],[104.85,26.75],[105.30,27.15],[105.60,27.50]]},
+  { name:"苗　岭", amp:0.45, labelAt:[106.35,26.12], pts:[[105.60,26.10],[106.10,26.20],[106.60,26.10],[107.10,26.25],[107.60,26.40]]},
+];
+const BORDERS = [
+  [[105.35,27.85],[106.05,30.0],[106.12,29.5],[106.28,29.0],[106.45,28.75],[106.62,28.55],[106.86,28.50],[107.05,28.30],[107.25,28.10],[107.45,27.90],[107.65,27.75]], /* 川黔 */
+  [[105.35,27.85],[105.10,27.45],[105.00,27.05],[105.10,26.65],[105.30,26.30],[105.55,26.00],[105.80,25.70],[106.00,25.45],[106.15,25.20]], /* 黔滇 */
+];
+const CITIES = [
+  ["重庆",106.55,29.56,1],["贵阳",106.69,26.60,1],["遵义",106.93,27.73,1],["昆明",102.83,24.88,1],
+  ["成都",104.07,30.67,2],["长沙",113.00,28.22,2],["武汉",114.30,30.55,2],
+  ["泸州",105.44,28.88,2],["宜宾",104.64,28.77,2],["毕节",105.28,27.30,2],["赤水",105.70,28.59,2],
+  ["曲靖",103.80,25.50,2],["昭通",102.85,27.34,2],["古蔺",105.81,28.04,2],
+  ["桐梓",106.83,28.14,3],["松坎",106.86,28.42,3],["湄潭",107.48,27.76,3],["息烽",106.74,27.09,3],
+  ["修文",106.60,26.84,3],["龙里",106.98,26.45,3],["长顺",106.44,26.02,3],["紫云",106.09,25.75,3],
+  ["兴仁",105.19,25.73,3],["大方",105.61,27.14,3],["黔西",106.03,27.02,3],["金沙",106.22,27.46,3],
+  ["鸭溪",106.63,27.70,3],["鲁班场",106.25,27.68,3],["仁怀",106.40,27.80,3],["茅台",106.38,27.76,3],
+  ["习水",106.20,28.33,3],["元厚",105.92,28.36,3],["土城",105.99,28.28,3],["太平渡",105.85,28.04,3],
+  ["二郎滩",106.03,28.14,3],["叙永",105.44,28.17,3],["扎西",105.05,27.79,3],["镇雄",104.87,27.44,3],
+  ["会理",102.25,26.66,3],["皎平渡",102.68,26.52,3],["嵩明",103.04,25.34,3],["寻甸",102.66,25.56,3],
+  ["娄山关",106.87,28.01,3],
+];
+const PROV_LABELS = [["四 川",105.6,29.7],["贵 州",107.0,27.0],["云 南",103.3,26.0]];
+
+/* ---------- 敌我路线与章节 ---------- */
+const PHASES = [
+  { chip:"序幕", no:"", dates:"1935.1.15 — 1.17", dur:8, redStr:"红军主力", mapCam:{t:[106.93,27.73], span:270},
+    cam:{from:{t:[107.55,27.42],h:88,az:38,el:36}, to:{t:[107.18,27.58],h:72,az:30,el:36}},
+    route:null,
+    events:[],
+    enemies:[
+      {name:"川军·郭勋祺部", str:"万余人", n:1.2, route:[[C.luzhou[0],C.luzhou[1]],[105.70,28.59],[105.85,28.42],[105.99,28.28]], t:[0.05,0.85]},
+      {name:"黔军·王家烈残部", str:"约1.2万", n:1.2, route:[[C.zunyi[0],C.zunyi[1]],[106.63,27.70],[106.22,27.46]], t:[0.1,0.7]},
+      {name:"中央军·薛岳部", str:"两纵队约8万", n:8, route:[[C.guiyang[0],C.guiyang[1]],[106.74,27.09],[106.63,27.70]], t:[0.15,1.0]},
+      {name:"滇军·孙渡纵队", str:"3个旅约1.5万", n:1.5, route:[[C.zhaotong[0],C.zhaotong[1]],[103.60,27.40],[104.60,27.42],[105.28,27.30],[105.61,27.14]], t:[0.05,1.0]},
+      {type:"line", name:"川军长江防线", str:"约6万", pts:[[104.64,28.77],[105.44,28.88],[106.00,29.20],[106.55,29.56]]},
+      {type:"ring", at:[106.93,27.73], label:"围剿总投入约", str:"40万"},
+    ],
+    card:{
+      title:"序幕 · 遵义会议", date:"1935年1月15日—17日 · 遵义",
+      body:[
+        "遵义会议在极端危急的关头挽救了党、挽救了红军、挽救了中国革命，事实上确立了毛泽东在党中央和红军的领导地位。",
+        "长征出发时8.6万余人，经湘江战役锐减，此时中央红军约3.7万人（官方通报数，各档案约3.5—3.7万）；蒋介石调集川、滇、黔各系地方军与中央军共约40万人围堵红军——此为全国范围总投入，含长江南岸封锁部队与地方团练，黔北一线仅其中一部，妄图将红军聚歼于乌江以西、长江以南。",
+        "遵义会议后，中央即确定北上抗日、争取与红四方面军会师的总方针；但具体经泸州、宜宾之间北渡长江的作战方案，是在一渡赤水前后才明确提出的——川军已沿长江严密布防，一张巨大的围捕之网正在合拢。"
+      ],
+      quote:"横断山，路难行。敌重兵，压黔境。——《长征组歌》",
+      enemy:"川军郭勋祺部（入黔先头，1934年12月先期入黔，川军入黔总数各记4—5万）由泸州南下赤水；中央军薛岳部（吴奇伟、周浑元两纵队合计约数）由贵阳北进；滇军孙渡纵队（入黔先遣）东进入毕节、大定（大定1935年为大定县，今大方县）；黔军王家烈残部（遵义战役前已锐减，各记1—1.2万）退守打鼓新场一线（时属黔西县，今金沙县）；川军长江防线为长江全线封锁部队，非单一建制"
+    }
+  },
+  { chip:"一渡赤水", no:"壹", dates:"1935.1.19 — 2.4", dur:13, redStr:"红军主力", mapCam:{t:[105.75,27.95], span:330},
+    cam:{from:{t:[106.93,27.80],h:66,az:22,el:36}, to:{t:[105.98,28.18],h:58,az:-8,el:35}},
+    route:[[106.93,27.73],[106.87,28.01],[106.83,28.14],[106.86,28.42],[106.70,28.48],[106.45,28.42],[106.20,28.33],[105.99,28.28],[106.03,28.30],[105.99,28.28],[105.95,28.31],[105.90,28.28],[105.83,28.20],[105.81,28.10],[105.81,28.04],[105.60,28.10],[105.44,28.17],[105.20,27.98],[105.05,27.79]],
+    events:[
+      {type:"battle", at:[106.03,28.30], title:"土城·青杠坡战斗", sub:"1.28—29 · 敌情误判 · 攻击未果、主动转移", dur:7, r:17.0},
+      {type:"cross", n:1, at:[105.96,28.31], title:"第一渡 · 赤水河", sub:"1.29 元厚 · 土城渡口"},
+    ],
+    enemies:[
+      {name:"川军·郭勋祺部", str:"万余人", n:1.2, route:[[105.70,28.59],[105.92,28.38],[105.99,28.28],[106.05,28.27]], t:[0.05,0.55]},
+      {name:"川军·尾追过河", str:"约2万", n:2, route:[[105.99,28.28],[105.90,28.28],[105.83,28.20],[105.81,28.10],[105.81,28.04]], t:[0.62,0.95]},
+      {name:"中央军·周浑元纵队", str:"3个师约3.5万", n:3.5, route:[[106.63,27.70],[106.22,27.46],[105.90,27.30],[105.61,27.14]], t:[0.15,0.9]},
+      {name:"滇军·孙渡纵队", str:"3个旅约1.5万", n:1.5, route:[[105.61,27.14],[105.28,27.30],[104.87,27.44],[104.95,27.75]], t:[0.2,0.95]},
+      {type:"line", name:"川军长江防线", str:"约6万", pts:[[104.64,28.77],[105.44,28.88],[106.00,29.20],[106.55,29.56]]},
+    ],
+    card:{
+      title:"第一渡 · 打不赢就走", date:"1935年1月19日—2月4日",
+      body:[
+        "1月19日，红军撤离遵义，兵分三路向西，经桐梓、松坎向赤水、赤水城方向推进。1月28日红军在土城与土城以东约三公里的青杠坡一线同川军郭勋祺部激战——青杠坡是土城战斗的主要战场。因对川军入黔兵力估计不足，红军攻击未果，主动撤出战斗。",
+        "毛泽东当机立断：放弃原定北渡长江的计划，撤出战斗、甩开敌人、西渡赤水——绝不在不利条件下与优势之敌硬拼。",
+        "1月29日拂晓，红军自元厚、土城一线首次渡过赤水河，进入川南，再经古蔺、叙永向滇东北扎西地区集结。"
+      ],
+      quote:"打得赢就打，打不赢就走。——毛泽东军事原则（后人的概括表述）",
+      enemy:"川军郭勋祺部紧咬追过赤水河；周浑元纵队经打鼓新场（时属黔西县）趋大定；滇军孙渡纵队经毕节趋镇雄扎西方向堵截"
+    }
+  },
+  { chip:"二渡·遵义大捷", no:"贰", dates:"1935.2.5 — 2.28", dur:15, redStr:"红军主力", mapCam:{t:[106.05,27.95], span:340},
+    cam:{from:{t:[105.02,27.92],h:64,az:-28,el:35}, to:{t:[106.88,27.92],h:66,az:14,el:37}},
+    route:[[105.05,27.79],[105.20,27.85],[105.45,27.95],[105.70,28.02],[105.85,28.04],[106.03,28.14],[106.20,28.16],[106.45,28.16],[106.70,28.14],[106.83,28.12],[106.87,28.01],[106.93,27.88],[106.93,27.73]],
+    events:[
+      {type:"note", at:[105.03,27.70], title:"扎西会议", sub:"2.5—9 · 威信水田寨"},
+      {type:"cross", n:2, at:[105.85,28.04], title:"第二渡 · 赤水河", sub:"2.18—21 · 太平渡 · 二郎滩"},
+      {type:"battle", at:[106.87,28.01], title:"强夺娄山关", sub:"2.25—26 · 攻克黔北天险 · 打开遵义门户", dur:9, r:20.0},
+      {type:"victory", at:[106.93,27.73], title:"重占遵义 · 遵义战役", sub:"歼灭和击溃敌军2师又8团 · 长征以来首次重大胜利"},
+    ],
+    enemies:[
+      {name:"滇军·孙渡纵队西返", str:"约1.5万", n:1.5, route:[[104.95,27.75],[104.87,27.44],[103.60,27.40],[102.85,27.34]], t:[0.05,0.5]},
+      {name:"川军·南岸堵截", str:"约3万", n:3, route:[[105.44,28.88],[105.44,28.17]], t:[0.1,0.6]},
+      {name:"黔军·王家烈部", str:"约1.2万", n:1.2, route:[[106.83,28.14],[106.87,28.01],[106.93,27.85]], t:[0.45,0.78]},
+      {name:"中央军·吴奇伟纵队", str:"4个师约4万", n:4, route:[[106.69,26.60],[106.74,27.09],[106.63,27.70],[106.90,27.80]], t:[0.5,0.95]},
+      {type:"blob", at:[104.95,27.75], name:"敌重兵集团", str:"约15万", n:15, sub:"被甩在川滇边·扑空", t:[0,0.4]},
+    ],
+    card:{
+      title:"第二渡 · 杀个回马枪", date:"1935年2月18日—28日",
+      body:[
+        "2月5—9日，中央在云南威信水田寨（扎西）连续召开扎西会议，传达遵义会议决议、讨论红军下一步行动方针；随后整编：机关人员下连，全军缩编为16个团，扩红三千余，共3万余人，部队更加轻装精干。",
+        "蒋介石判定红军将北渡长江，重兵扑向川滇边境，黔北顿时空虚。毛泽东抓住战机：出敌不意，回师东进！",
+        "2月18—21日，红军由太平渡、二郎滩二渡赤水，重入黔北。从2月18日二渡到2月26日进占遵义，9天之内再克桐梓、强夺天险娄山关、重占遵义。",
+        "遵义战役，红军歼灭和击溃国民党军2个师又8个团（其中吴奇伟纵队第103师一部被歼），俘敌约3000人——这是长征以来最大的一次胜利。"
+      ],
+      quote:"雄关漫道真如铁，而今迈步从头越。——毛泽东《忆秦娥·娄山关》",
+      enemy:"滇军被甩在川滇边回师保滇；黔军王家烈部退守娄山关一线，一部被歼、大部被击溃；吴奇伟纵队由贵阳北援，在遵义城南忠深铺、老鸦山一线及枫香坝方向被击溃（第103师一部被全歼）"
+    }
+  },
+  { chip:"三渡·佯动", no:"叁", dates:"1935.3.10 — 3.17", dur:12, redStr:"红军主力", mapCam:{t:[106.25,27.90], span:300},
+    cam:{from:{t:[106.90,27.78],h:56,az:14,el:35}, to:{t:[106.18,27.98],h:54,az:-6,el:35}},
+    route:[[106.93,27.73],[106.75,27.70],[106.50,27.62],[106.25,27.68],[106.30,27.72],[106.38,27.76],[106.20,27.88],[106.03,28.14],[105.85,28.04],[105.82,27.98]],
+    events:[
+      {type:"note", at:[106.50,27.62], title:"苟坝会议", sub:"3.10 · 放弃攻打打鼓新场（今金沙县）"},
+      {type:"battle", at:[106.25,27.68], title:"鲁班场之战", sub:"3.15 · 攻坚未克 · 旋即转兵（红军未受重创）", dur:7, r:17.5},
+      {type:"cross", n:3, at:[106.38,27.76], title:"第三渡 · 赤水河", sub:"3.16—17 · 茅台渡口 · 大张旗鼓"},
+    ],
+    enemies:[
+      {type:"blob", at:[106.25,27.68], name:"周浑元纵队", str:"3个师约3.5万", n:3.5, sub:"凭坚固守", t:[0,0.55]},
+      {name:"中央军·吴奇伟纵队西调", str:"4个师约4万", n:4, route:[[106.90,27.80],[106.63,27.70],[106.40,27.80],[106.20,27.80]], t:[0.35,0.85]},
+      {name:"滇军·孙渡纵队", str:"3个旅约1.5万", n:1.5, route:[[104.95,27.75],[105.28,27.30],[105.61,27.14],[105.80,27.60]], t:[0.15,0.95]},
+      {name:"川军·沿河布防", str:"约5万", n:5, route:[[105.44,28.88],[105.70,28.59],[105.92,28.38],[105.99,28.28]], t:[0.2,0.9]},
+    ],
+    card:{
+      title:"第三渡 · 声东击西", date:"1935年3月10日—17日",
+      body:[
+        "3月10日苟坝会议，毛泽东力排众议，放弃攻打打鼓新场，使红军免于陷入重围，并决定成立毛泽东、周恩来、王稼祥\"三人军事指挥小组\"（正式组建一般记为3月12日军委命令）。",
+        "3月15日攻鲁班场（时属遵义县，今播州区）周浑元纵队未克——此为一次未能奏效的攻坚，红军本身未受重创（与青杠坡失利性质不同），当即转兵。",
+        "3月16—17日，红军在茅台镇三渡赤水，再入川南——这一次是佯动：大张旗鼓、白天渡河，摆出北渡长江的姿态，随即隐蔽集结于山沟丛林之中。"
+      ],
+      quote:"兵者，诡道也。——《孙子兵法》",
+      enemy:"周浑元3个师凭坚固守鲁班场；吴奇伟、周浑元主力被诱西调；滇军再度东进；川军沿赤水河南压布防"
+    }
+  },
+  { chip:"四渡·兵临贵阳", no:"肆", dates:"1935.3.20 — 4.9", dur:15, redStr:"红军主力", mapCam:{t:[106.15,27.55], span:340},
+    cam:{from:{t:[105.92,28.02],h:58,az:2,el:35}, to:{t:[106.66,26.82],h:74,az:24,el:38}},
+    route:[[105.82,27.98],[105.85,28.04],[106.03,28.14],[106.18,28.00],[106.30,27.80],[106.45,27.62],[106.62,27.50],[106.66,27.42],[106.74,27.28],[106.80,27.09],[106.82,26.86],[106.80,26.70],[106.74,26.52]],
+    events:[
+      {type:"cross", n:4, at:[105.85,28.04], title:"第四渡 · 赤水河", sub:"3.21—22 · 二郎滩 · 九溪口 · 太平渡"},
+      {type:"feint", at:[106.66,27.42], to:[106.74,27.28], title:"南渡乌江", sub:"3.27—29 · 马场 · 江口 · 大塘 · 梯子岩"},
+      {type:"alarm", at:[106.69,26.60], title:"兵临贵阳", sub:"4.2 · 蒋介石急调滇军驰援贵阳"},
+    ],
+    enemies:[
+      {name:"敌主力·仍在向川南开进", str:"约15万", n:15, route:[[106.20,27.74],[105.90,28.00],[105.81,28.10],[105.81,28.04],[105.60,28.10],[105.44,28.17]], t:[0.05,0.55]},
+      {name:"川军·古蔺合围扑空", str:"约4万", n:4, route:[[105.44,28.88],[105.81,28.10],[105.81,28.04]], t:[0.2,0.7]},
+      {name:"蒋介石行营(重庆→贵阳)", route:[[106.55,29.56],[106.60,28.30],[106.69,26.60]], t:[0.12,0.32], special:"chiang"},
+      {name:"滇军·孙渡纵队驰援", str:"3个旅约1.5万", n:1.5, route:[[105.61,27.14],[106.03,27.02],[106.48,27.16],[106.69,26.60]], t:[0.62,1.0]},
+      {name:"周浑元·回师东追", str:"3个师约3.5万", n:3.5, route:[[105.44,28.17],[105.90,28.06],[106.10,28.15],[106.30,27.90]], t:[0.62,1.0]},
+    ],
+    card:{
+      title:"第四渡 · 神来之笔", date:"1935年3月20日—4月9日",
+      body:[
+        "3月20日，红军隐蔽折返东进；21—22日夜，自二郎滩、九溪口、太平渡四渡赤水——当敌军主力还在昼夜西进时，红军已从其背后东渡赤水，随即全军向南急插。",
+        "3月27—29日，红军一部由仁怀、播县一线南渡乌江（马场、江口、大塘、梯子岩等渡口，各书记不一），把追兵远远甩在赤水河以西；红一军团经遵义南下，4月2日兵临贵阳。",
+        "4月2日，红军一部佯攻贵阳城、前锋兵临城下（随后经息烽一线南下）；蒋介石正坐镇贵阳督战，城内兵力空虚，急电滇军孙渡纵队星夜驰援——\"只要能把滇军调出来，就是胜利。\"（据回忆性文献）4月9日，红军由贵阳南郊龙里鸭池河一线渡河入滇。",
+      ],
+      quote:"乌江天险重飞渡，兵临贵阳逼昆明。——《长征组歌》",
+      enemy:"敌主力仍向川南开进扑空；蒋介石3月24日（部分资料记3月23日）由重庆飞抵贵阳；滇军孙渡纵队星夜驰援贵阳；周浑元回师东追已晚"
+    }
+  },
+  { chip:"西进云南", no:"", dates:"1935.4.9 — 4.29", dur:12, redStr:"红军主力", mapCam:{t:[105.05,26.10], span:520},
+    cam:{from:{t:[106.70,26.62],h:80,az:24,el:38}, to:{t:[103.20,25.42],h:96,az:-18,el:37}},
+    route:[[106.74,26.52],[106.66,26.40],[106.62,26.22],[106.44,26.02],[106.20,25.85],[106.09,25.75],[105.80,25.62],[105.19,25.73],[104.70,25.48],[104.30,25.42],[103.80,25.50],[103.40,25.42],[103.04,25.34],[102.90,25.15]],
+    events:[
+      {type:"feint", at:[102.90,25.15], to:[102.84,24.95], title:"威逼昆明", sub:"4.27 龙云急调民团保省城"},
+    ],
+    enemies:[
+      {name:"滇军·孙渡回援昆明", str:"约1.5万", n:1.5, route:[[106.69,26.60],[105.95,26.25],[105.30,25.75],[104.30,25.55],[103.80,25.50],[102.83,24.88]], t:[0.05,0.65]},
+      {name:"中央军·追兵昼夜兼程", str:"约10万", n:10, route:[[106.69,26.60],[106.30,26.30],[105.75,25.90],[105.19,25.73],[104.30,25.45],[103.80,25.50],[103.04,25.34]], t:[0.25,1.0]},
+      {type:"blob", at:[102.83,24.88], name:"昆明告急", str:"民团约1万", n:1, sub:"龙云调民团保省城", t:[0.45,1]},
+    ],
+    card:{
+      title:"调虎离山 · 大踏步西进", date:"1935年4月9日—29日",
+      body:[
+        "4月9日，红军由龙里鸭池河一线渡河入滇。滇军被调往贵阳，云南兵力空虚，红军乘虚突然西进，大踏步横穿贵州，直入云南。",
+        "4月下旬，前锋威逼昆明，云南省主席龙云慌忙收拢民团回保省城，金沙江防务愈发空虚。",
+        "红军虚晃一枪，平均每日行军六七十里，末段强行军可达日行一百余里，直插金沙江。"
+      ],
+      quote:"战士双脚走天下……调虎离山袭金沙。——《长征组歌》",
+      enemy:"滇军孙渡纵队昼夜回援昆明；中央军追兵尾随横穿黔滇，始终慢红军一步"
+    }
+  },
+  { chip:"巧渡金沙江", no:"", dates:"1935.5.3 — 5.12", dur:13, redStr:"红军主力", mapCam:{t:[102.95,25.95], span:330},
+    cam:{from:{t:[102.95,25.35],h:70,az:-10,el:35}, to:{t:[102.38,26.52],h:62,az:12,el:35}},
+    route:[[102.90,25.15],[102.76,25.35],[102.66,25.56],[102.55,25.85],[102.48,26.10],[102.58,26.28],[102.68,26.52],[102.60,26.62],[102.42,26.70],[102.25,26.66]],
+    events:[
+      {type:"cross", n:0, at:[102.68,26.52], title:"巧渡金沙江", sub:"5.3—9 · 皎平渡 · 6只木船 · 7昼夜"},
+      {type:"note", at:[102.25,26.66], title:"会理会议", sub:"5.12 · 决定立即强渡大渡河"},
+      {type:"victory", at:[102.30,26.70], title:"跳出重围", sub:"把约20万追兵甩在金沙江南岸"},
+    ],
+    enemies:[
+      {name:"中央军·追兵追至江边", str:"各路约20万", n:20, route:[[103.04,25.30],[102.96,25.22],[102.87,25.47],[102.80,25.70],[102.72,25.96],[102.63,26.22],[102.56,26.48],[102.55,26.60]], t:[0.25,0.9]},
+      {type:"blob", at:[102.55,26.62], name:"追兵止步", str:"约20万", n:20, sub:"隔江望岸·未及渡", t:[0.9,1]},
+      {type:"blob", at:[102.32,26.50], name:"川康边防军", str:"刘文辉部约1万", n:1, sub:"控制会理、中江一线（川岸）", t:[0,1]},
+    ],
+    card:{
+      title:"巧渡金沙江 · 跳出重围", date:"1935年5月3日—12日",
+      body:[
+        "5月3日—9日，红一、红三军团在云南巧家皎平渡依靠6只小船、历时7天7夜，3万余人渡过金沙江，全程未打一枪一弹——这是红军长征中唯一一次无战斗的渡江。渡江由中央军委纵队（总参谋长孙继祖）指挥，红一、红三军团实施。追兵赶到江边，只能望江兴叹。5月12日会理会议决定立即强渡大渡河，5月14日红军抢渡成功，四渡赤水至此结束。",
+        "至此，中央红军彻底跳出数十万大军的包围圈。从1月19日撤离遵义到3月22日四渡赤水，两个多月里，红军在赤水河两岸往复穿插、声东击西，把十倍于己的敌军\"调\"得团团转——以少胜多、声东击西、机动灵活，使中央红军完全摆脱数十万国民党军的围追堵截，把革命大本营转向西北，揭开红军长征\"主动灵活\"的新阶段。",
+        "据纪实回忆，1960年蒙哥马利访华，盛赞三大战役，毛泽东却说：四渡赤水才是我的得意之笔。"
+      ],
+      quote:"调虎离山袭金沙，毛主席用兵真如神！——《长征组歌》",
+      enemy:"中央军各路追兵（合计约数，非同一支部队，与\"40万围剿总投入\"口径不同）昼夜兼程赶到金沙江北岸，渡口船只已被收缴，隔江望岸"
+    }
+  },
+];
+const TOTAL_DUR = PHASES.reduce((s,p)=>s+p.dur,0);
+const easeIO = t => t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+
+/* ================= Three.js 场景 ================= */
+const canvas = $("#gl");
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
+} catch(e){
+  ldStatus.textContent = "当前环境不支持 WebGL，无法渲染三维地形。";
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f16);
+scene.fog = new THREE.Fog(0x0a0f16, 320, 980);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.5, 4200);
+camera.position.set(180, 220, 260);
+
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 12; controls.maxDistance = 2400;
+controls.maxPolarAngle = 1.42;
+
+scene.add(new THREE.HemisphereLight(0x9db8d2, 0x22301f, 0.75));
+const sun = new THREE.DirectionalLight(0xffe2b0, 1.35);
+sun.position.set(260, 420, -260);
+scene.add(sun);
+
+/* 星空 */
+(function stars(){
+  const n=1400, pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, e=Math.random()*Math.PI*0.48, r=1500;
+    pos[i*3]=Math.cos(a)*Math.cos(e)*r; pos[i*3+1]=Math.sin(e)*r+30; pos[i*3+2]=Math.sin(a)*Math.cos(e)*r;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xbfd0e0, size:1.6, sizeAttenuation:false, transparent:true, opacity:.75})));
+})();
+
+/* ================= DEM 地形 ================= */
+let demImg=null, demW=0, demH=0, DEM_LON0, DEM_LON1, DEM_LAT0, DEM_LAT1;
+const Z=9;
+function tile2lat(y,z){ const n=Math.PI-2*Math.PI*y/Math.pow(2,z); return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))); }
+function lon2tileX(lon,z){ return (lon+180)/360*Math.pow(2,z); }
+function lat2tileY(lat,z){ const r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z); }
+
+function heightRaw(lon,lat){
+  if(demImg){
+    const px=(lon-DEM_LON0)/(DEM_LON1-DEM_LON0)*demW;
+    const py=(DEM_LAT0-lat)/(DEM_LAT0-DEM_LAT1)*demH;
+    if(px<0||py<0||px>=demW-1||py>=demH-1) return null;
+    const x0=Math.floor(px), y0=Math.floor(py), fx=px-x0, fy=py-y0;
+    const d=demImg, i=y0*demW+x0;
+    const dec=k=>(d[k*4]*256 + d[k*4+1] + d[k*4+2]/256 - 32768)/1000;
+    const a=dec(i), b=dec(i+1), c2=dec(i+demW), d2=dec(i+demW+1);
+    return (a*(1-fx)+b*fx)*(1-fy) + (c2*(1-fx)+d2*fx)*fy;
+  }
+  return null;
+}
+/* 河谷下切（保证河流管线贴地可见） */
+function carveAt(lon,lat){
+  let c=0;
+  for(const r of RIVERS){
+    const pts=r.pts;
+    for(let i=0;i<pts.length-1;i++){
+      const [x1,y1]=lonLat2xy(pts[i][0],pts[i][1]), [x2,y2]=lonLat2xy(pts[i+1][0],pts[i+1][1]);
+      const [px,py]=lonLat2xy(lon,lat);
+      const dx=x2-x1, dy=y2-y1, L2=dx*dx+dy*dy;
+      let t=((px-x1)*dx+(py-y1)*dy)/L2; t=Math.max(0,Math.min(1,t));
+      const qx=x1+dx*t, qy=y1+dy*t;
+      const d=Math.hypot(px-qx,py-qy);
+      c -= 0.13*Math.exp(-(d*d)/(2.2*2.2));
+    }
+  }
+  return c;
+}
+/* 战区外围扩展范围（延伸渲染，杜绝画面黑边） */
+const EXT_LONW=95.5, EXT_LONE=114.8, EXT_LATN=34.2, EXT_LATS=20.6;
+function heightFinal(lon,lat){
+  const dh=heightRaw(lon,lat);
+  if(dh!==null) return Math.max(0.03, dh+carveAt(lon,lat));
+  /* 窗口外：以边界DEM高程向程序化地形渐变混合，保证无缝 */
+  const bandLon=(LONE-LONW)*0.10, bandLat=(LATN-LATS)*0.10;
+  const dLon=Math.max(LONW-lon, lon-LONE, 0), dLat=Math.max(LATN-lat, lat-LATS, 0);
+  const w=Math.min(1, Math.max(dLon/bandLon, dLat/bandLat));
+  const edgeH=heightRaw(Math.min(LONE,Math.max(LONW,lon)), Math.min(LATN,Math.max(LATS,lat)));
+  const ph=procHeight(lon,lat);
+  return Math.max(0.03, (edgeH===null?0.8:edgeH)*(1-w) + ph*w);
+}
+
+/* 备用程序化地形 */
+function hash2(x,y){ const s=Math.sin(x*127.1+y*311.7)*43758.5453; return s-Math.floor(s); }
+function vnoise(x,y){
+  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  return hash2(xi,yi)*(1-u)*(1-v)+hash2(xi+1,yi)*u*(1-v)+hash2(xi,yi+1)*(1-u)*v+hash2(xi+1,yi+1)*u*v;
+}
+function procHeight(lon,lat){
+  let h = 1.45 - 0.95*smooth((lat-28.0)/1.7) - 0.15*smooth((lon-104.6)/1.6) + 0.55*smooth((102.6-lon)/1.2);
+  h += (vnoise(lon*2.1,lat*2.1)-0.5)*0.5 + (vnoise(lon*6.3,lat*6.3)-0.5)*0.16;
+  for(const rg of RIDGES){
+    const [px,py]=lonLat2xy(lon,lat);
+    let dmin=1e9;
+    const pts=rg.pts;
+    for(let i=0;i<pts.length-1;i++){
+      const [x1,y1]=lonLat2xy(pts[i][0],pts[i][1]), [x2,y2]=lonLat2xy(pts[i+1][0],pts[i+1][1]);
+      const dx=x2-x1,dy=y2-y1,L2=dx*dx+dy*dy;
+      let t=((px-x1)*dx+(py-y1)*dy)/L2; t=Math.max(0,Math.min(1,t));
+      dmin=Math.min(dmin, Math.hypot(px-(x1+dx*t), py-(y1+dy*t)));
+    }
+    h += rg.amp*Math.exp(-(dmin*dmin)/(14*14));
+  }
+  for(const r of RIVERS){
+    const [px,py]=lonLat2xy(lon,lat);
+    let dmin=1e9;
+    const pts=r.pts;
+    for(let i=0;i<pts.length-1;i++){
+      const [x1,y1]=lonLat2xy(pts[i][0],pts[i][1]), [x2,y2]=lonLat2xy(pts[i+1][0],pts[i+1][1]);
+      const dx=x2-x1,dy=y2-y1,L2=dx*dx+dy*dy;
+      let t=((px-x1)*dx+(py-y1)*dy)/L2; t=Math.max(0,Math.min(1,t));
+      dmin=Math.min(dmin, Math.hypot(px-(x1+dx*t), py-(y1+dy*t)));
+    }
+    h -= 0.2*Math.exp(-(dmin*dmin)/(2.6*2.6));
+  }
+  return Math.max(0.05,h);
+}
+function smooth(x){ x=Math.max(0,Math.min(1,x)); return x*x*(3-2*x); }
+
+async function loadDEM(){
+  try{
+    /* 快速预检：单瓦片探测，不可达立即回退（避免离线时逐瓦片等待） */
+    {
+      const probeX=Math.floor(lon2tileX((LONW+LONE)/2,Z));
+      const probeY=Math.floor(lat2tileY((LATN+LATS)/2,Z));
+      const ctl0=new AbortController(); const tmr0=setTimeout(()=>ctl0.abort(),6000);
+      const probe=await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${probeX}/${probeY}.png`,{signal:ctl0.signal, mode:"cors"});
+      clearTimeout(tmr0);
+      if(!probe.ok) throw new Error("probe");
+    }
+    const x0=Math.floor(lon2tileX(LONW,Z)), x1=Math.floor(lon2tileX(LONE,Z));
+    const y0=Math.floor(lat2tileY(LATN,Z)), y1=Math.floor(lat2tileY(LATS,Z));
+    const tx1=x1-x0+1, ty1=y1-y0+1;
+    const cv=document.createElement("canvas");
+    cv.width=tx1*256; cv.height=ty1*256;
+    const ctx=cv.getContext("2d",{willReadFrequently:true});
+    DEM_LON0=x0/Math.pow(2,Z)*360-180; DEM_LON1=(x1+1)/Math.pow(2,Z)*360-180;
+    DEM_LAT0=tile2lat(y0,Z); DEM_LAT1=tile2lat(y1+1,Z);
+    demW=cv.width; demH=cv.height;
+    const jobs=[];
+    for(let ty=y0;ty<=y1;ty++) for(let tx=x0;tx<=x1;tx++) jobs.push([tx,ty]);
+    let done=0, failed=0;
+    const urlFor=(tx,ty)=>`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${tx}/${ty}.png`;
+    async function grab(tx,ty){
+      for(const base of ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium", "https://elevation-tiles-prod.s3.amazonaws.com/terrarium"]){
+        try{
+          const ctl=new AbortController(); const timer=setTimeout(()=>ctl.abort(),7000);
+          const res=await fetch(`${base}/${Z}/${tx}/${ty}.png`,{signal:ctl.signal, mode:"cors"});
+          clearTimeout(timer);
+          if(!res.ok) throw 0;
+          const bmp=await createImageBitmap(await res.blob());
+          ctx.drawImage(bmp,(tx-x0)*256,(ty-y0)*256);
+          return true;
+        }catch(e){ /* 换镜像重试 */ }
+      }
+      return false;
+    }
+    const POOL=10; let idx=0;
+    async function worker(){
+      while(idx<jobs.length){
+        const [tx,ty]=jobs[idx++];
+        const ok=await grab(tx,ty);
+        done++; if(!ok) failed++;
+        ldBar.style.width=(done/jobs.length*100)+"%";
+        ldStatus.textContent=`正在加载真实地形高程数据… ${done}/${jobs.length} 瓦片`;
+      }
+    }
+    await Promise.all(Array.from({length:POOL},worker));
+    if(failed > jobs.length*0.05) throw new Error("tiles failed");
+    demImg=ctx.getImageData(0,0,demW,demH).data;
+    ldStatus.textContent="真实地形加载完成 ✓";
+    return true;
+  }catch(e){
+    ldStatus.textContent="地形服务不可达，切换为程序化示意地形";
+    demImg=null;
+    const tg=document.querySelector(".tagline");
+    if(tg) tg.textContent="示意地形（离线程序化）· 真实经纬坐标 · 三维沙盘推演";
+    return false;
+  }
+}
+
+/* 地形网格 */
+function buildTerrain(){
+  const NX=641, NZ=641;
+  const pos=new Float32Array(NX*NZ*3);
+  const col=new Float32Array(NX*NZ*3);
+  const idx=[];
+  for(let j=0;j<NZ;j++){
+    const lat=EXT_LATN-(EXT_LATN-EXT_LATS)*j/(NZ-1);
+    for(let i=0;i<NX;i++){
+      const lon=EXT_LONW+(EXT_LONE-EXT_LONW)*i/(NX-1);
+      const h=heightFinal(lon,lat);
+      const [x,z]=lonLat2xy(lon,lat);
+      const k=(j*NX+i);
+      pos[k*3]=x; pos[k*3+1]=h*EXAG; pos[k*3+2]=z;
+    }
+  }
+  for(let j=0;j<NZ-1;j++) for(let i=0;i<NX-1;i++){
+    const a=j*NX+i, b=a+1, c2=a+NX, d=c2+1;
+    idx.push(a,c2,b, b,c2,d);
+  }
+  /* 高程配色 */
+  const ramp=[
+    [0.15,[0.13,0.30,0.24]],[0.45,[0.16,0.36,0.26]],[0.8,[0.24,0.42,0.27]],[1.25,[0.36,0.44,0.27]],
+    [1.7,[0.47,0.44,0.29]],[2.2,[0.50,0.41,0.30]],[2.9,[0.48,0.40,0.33]],[3.6,[0.55,0.51,0.45]],[4.4,[0.88,0.88,0.92]]
+  ];
+  function rampColor(h){
+    if(h<=ramp[0][0]) return ramp[0][1];
+    for(let i=0;i<ramp.length-1;i++){
+      if(h<=ramp[i+1][0]){
+        const t=(h-ramp[i][0])/(ramp[i+1][0]-ramp[i][0]);
+        return [ramp[i][1][0]+(ramp[i+1][1][0]-ramp[i][1][0])*t,
+                ramp[i][1][1]+(ramp[i+1][1][1]-ramp[i][1][1])*t,
+                ramp[i][1][2]+(ramp[i+1][1][2]-ramp[i][1][2])*t];
+      }
+    }
+    return ramp[ramp.length-1][1];
+  }
+  for(let k=0;k<NX*NZ;k++){
+    const h=pos[k*3+1]/EXAG;
+    const c=rampColor(h);
+    /* 简易坡面明暗：比较左右高差 */
+    const i=k%NX, j=(k-i)/NX;
+    const hl=pos[(j*NX+Math.max(0,i-1))*3+1], hr=pos[(j*NX+Math.min(NX-1,i+1))*3+1];
+    const shade=1 - Math.min(0.22, Math.abs(hr-hl)*0.35);
+    col[k*3]=c[0]*shade; col[k*3+1]=c[1]*shade; col[k*3+2]=c[2]*shade;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos,3));
+  g.setAttribute("color", new THREE.BufferAttribute(col,3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m=new THREE.Mesh(g, new THREE.MeshStandardMaterial({vertexColors:true, roughness:1, metalness:0}));
+  scene.add(m);
+}
+
+/* ================= 通用构建工具 ================= */
+const worldGroup = new THREE.Group(); scene.add(worldGroup);
+function kmCurve(lonLats, resample=220, lift=0.55){
+  const raw=lonLats.map(([lo,la])=>{ const [x,z]=lonLat2xy(lo,la); return new THREE.Vector3(x, heightFinal(lo,la)*EXAG+lift, z); });
+  let c=new THREE.CatmullRomCurve3(raw, false, "centripetal");
+  const pts=[];
+  for(let i=0;i<=resample;i++){
+    const p=c.getPointAt(i/resample);
+    /* 反投影：按曲线点真实 XZ 反算经纬度取高程，确保路线始终贴在地形表面之上 */
+    const lon=LON0+p.x/KX, lat=LAT0-p.z/KZ;
+    p.y=heightFinal(lon,lat)*EXAG+lift;
+    pts.push(p);
+  }
+  return new THREE.CatmullRomCurve3(pts, false, "centripetal");
+}
+function tubeFromCurve(curve, radius, color, opts={}){
+  const tub=Math.max(40, Math.floor(curve.getLength()*0.9));
+  const g=new THREE.TubeGeometry(curve, Math.min(400,tub), radius, 6, false);
+  const m=new THREE.Mesh(g, new THREE.MeshBasicMaterial(Object.assign({color}, opts.material||{})));
+  if(opts.glow){
+    const gg=new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(400,tub), radius*2.6, 6, false),
+      new THREE.MeshBasicMaterial({color, transparent:true, opacity:opts.glow, blending:THREE.AdditiveBlending, depthWrite:false}));
+    worldGroup.add(gg);
+  }
+  worldGroup.add(m);
+  return m;
+}
+function lineFromLons(lonLats, color, opts={}){
+  const curve=kmCurve(lonLats, opts.samples||160, opts.lift??0.4);
+  const pts=curve.getPoints(opts.samples||160);
+  const g=new THREE.BufferGeometry().setFromPoints(pts);
+  const line=new THREE.Line(g, new THREE.LineDashedMaterial({color, dashSize:2.4, gapSize:2.0, transparent:true, opacity:opts.opacity??0.6}));
+  line.computeLineDistances();
+  worldGroup.add(line);
+  return line;
+}
+/* 文字贴图精灵 */
+function makeLabel(text, {fs=46, color="#e9edf2", bg="rgba(8,12,18,0.55)", border="rgba(255,255,255,0.14)", pad=14, kai=true, weight=500, kind="place", accent="#b9c6d2", theme=""}={}){
+  const cnv=document.createElement("canvas");
+  const ctx=cnv.getContext("2d");
+  /* 部队标注：军旗样式标签。theme=red 红底白字（红军）/ enemy 白底深蓝字（国军） */
+  if(kind==="troop"){
+    let bgC="rgba(24,33,46,0.92)", bdC=accent, glC=accent, txC="#e6edf4", shadow=true;
+    if(theme==="red"){ bgC="rgba(198,32,20,0.94)"; bdC="rgba(255,135,105,0.95)"; glC="#ffe3c8"; txC="#fff4ea"; }
+    else if(theme==="enemy"){ bgC="rgba(238,244,251,0.96)"; bdC="rgba(100,145,195,0.95)"; glC="#3c6288"; txC="#13294a"; shadow=false; }
+    const font=`${weight} ${fs}px "Microsoft YaHei","PingFang SC",sans-serif`;
+    ctx.font=font;
+    const tw=Math.ceil(ctx.measureText(text).width);
+    const tri=Math.round(fs*0.55), flag=Math.round(fs*0.7);
+    const w=tri+flag+tw+pad*1.5, h=Math.round(fs+pad*0.9);
+    cnv.width=w; cnv.height=h;
+    const c=cnv.getContext("2d");
+    const rr=Math.round(h*0.3);
+    c.beginPath();
+    c.moveTo(0.5, h/2);
+    c.lineTo(tri+3, 1);
+    c.lineTo(w-rr-1, 1);
+    c.quadraticCurveTo(w-1, 1, w-1, 1+rr);
+    c.lineTo(w-1, h-rr-1);
+    c.quadraticCurveTo(w-1, h-1, w-rr-1, h-1);
+    c.lineTo(tri+3, h-1);
+    c.closePath();
+    c.fillStyle=bgC;
+    c.fill();
+    c.strokeStyle=bdC;
+    c.globalAlpha=0.8;
+    c.lineWidth=2;
+    c.stroke();
+    c.globalAlpha=1;
+    c.textBaseline="middle";
+    c.font=`${weight} ${Math.round(fs*0.72)}px sans-serif`;
+    c.fillStyle=glC;
+    c.fillText("⚑", tri+3, h/2+fs*0.05);
+    c.font=font;
+    c.fillStyle=txC;
+    if(shadow){ c.shadowColor="rgba(0,0,0,0.8)"; c.shadowBlur=5; }
+    c.fillText(text, tri+flag, h/2+fs*0.05);
+    const tex=new THREE.CanvasTexture(cnv); tex.anisotropy=4;
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+    sp.renderOrder=62;
+    return sp;
+  }
+  const font=`${weight} ${fs}px ${kai?'"KaiTi","STKaiti",serif':'"Microsoft YaHei","PingFang SC",sans-serif'}`;
+  ctx.font=font;
+  const w=Math.ceil(ctx.measureText(text).width)+pad*2, h=fs+pad*1.1;
+  cnv.width=w; cnv.height=h;
+  const c2=cnv.getContext("2d");
+  c2.font=font;
+  if(bg){ roundRect(c2,0.5,0.5,w-1,h-1,10); c2.fillStyle=bg; c2.fill(); if(border){ c2.strokeStyle=border; c2.lineWidth=2; c2.stroke(); } }
+  c2.fillStyle=color; c2.textBaseline="middle"; c2.textAlign="center";
+  c2.shadowColor="rgba(0,0,0,0.8)"; c2.shadowBlur=6;
+  c2.fillText(text, w/2, h/2+fs*0.05);
+  const tex=new THREE.CanvasTexture(cnv); tex.anisotropy=4;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+  sp.renderOrder=60;
+  return sp;
+}
+function roundRect(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+}
+function spriteAt(sp, lon, lat, hKm, dy=0){
+  const [x,z]=lonLat2xy(lon,lat);
+  const y=heightFinal(lon,lat)*EXAG;
+  sp.position.set(x, y+dy, z);
+  sp.scale.set(hKm*sp.material.map.image.width/sp.material.map.image.height, hKm, 1);
+  worldGroup.add(sp);
+  return sp;
+}
+
+/* 底图：河流/边界/城市/标注 */
+const waterFlows=[];
+function invXY(x,z){ return [ LON0 + x/KX, LAT0 - z/KZ ]; }
+function makeFlowTex(){
+  const c=document.createElement("canvas"); c.width=128; c.height=128;
+  const x=c.getContext("2d");
+  for(let i=0;i<26;i++){
+    x.strokeStyle=`rgba(190,230,255,${0.05+Math.random()*0.11})`;
+    x.lineWidth=1+Math.random()*2.2;
+    x.beginPath();
+    const sx=Math.random()*128;
+    x.moveTo(sx,0);
+    x.bezierCurveTo(sx+14,42, sx-14,86, sx+6,128);
+    x.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+/* 按宽度铺设的真实水面（沿河谷贴地、下游渐宽、带流动高光） */
+function buildWater(r){
+  const N=280;
+  const curve=kmCurve(r.pts, N, 0.3);
+  const base=curve.getPoints(N);
+  const pos=[], uv=[], idx=[];
+  const wHalf=r.wKm/2;
+  let vLen=0, prev=null;
+  for(let i=0;i<=N;i++){
+    const t=i/N;
+    const p=base[i];
+    /* 反投影：按水面点真实位置取谷底高程 */
+    const lon=LON0+p.x/KX, lat=LAT0-p.z/KZ;
+    const pNext=base[Math.min(N,i+1)], pPrev=base[Math.max(0,i-1)];
+    const tx=pNext.x-pPrev.x, tz=pNext.z-pPrev.z;
+    const tl=Math.hypot(tx,tz)||1;
+    const nx=-tz/tl, nz=tx/tl;
+    const wf=(0.7+0.3*t)*wHalf;
+    const cy=heightFinal(lon,lat)*EXAG+0.3;
+    const Lx=p.x+nx*wf, Lz=p.z+nz*wf;
+    const Rx=p.x-nx*wf, Rz=p.z-nz*wf;
+    pos.push(Lx,cy,Lz, Rx,cy,Rz);
+    if(prev) vLen+=Math.hypot(p.x-prev[0],p.z-prev[1]);
+    prev=[p.x,p.z];
+    const v=vLen/(r.wKm*2.4);
+    uv.push(0,v, 1,v);
+    if(i<N){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const mat=new THREE.MeshStandardMaterial({color:0x2f7fb8, roughness:0.28, metalness:0.1,
+    transparent:true, opacity:0.94, side:THREE.DoubleSide, emissive:0x0a1e30, emissiveIntensity:.6});
+  worldGroup.add(new THREE.Mesh(g, mat));
+  const tex=makeFlowTex();
+  const ov=new THREE.Mesh(g, new THREE.MeshBasicMaterial({map:tex, transparent:true, opacity:0.24,
+    blending:THREE.AdditiveBlending, depthWrite:false}));
+  ov.renderOrder=5;
+  worldGroup.add(ov);
+  waterFlows.push({tex, speed:r.flow||1});
+}
+function buildBase(){
+  for(const r of RIVERS) buildWater(r);
+  for(const b of BORDERS) lineFromLons(b, 0x6a7a8a, {opacity:0.35, samples:200});
+  /* 山脉脊线微光 */
+  for(const rg of RIDGES) lineFromLons(rg.pts, 0x3a4b5c, {opacity:0.3, samples:120, lift:0.7});
+  for(const [name,lon,lat] of PROV_LABELS){
+    const sp=makeLabel(name,{fs:64, color:"rgba(150,170,190,0.5)", bg:null, kai:true});
+    sp.material.opacity=0.5;
+    spriteAt(sp, lon, lat, 22, 3);
+  }
+  for(const rg of RIDGES){
+    const sp=makeLabel(rg.name.replace("　",""),{fs:40, color:"#5f7488", bg:null});
+    spriteAt(sp, rg.labelAt[0], rg.labelAt[1], 7, 1.2);
+  }
+  for(const r of RIVERS){
+    const sp=makeLabel(r.name,{fs:38, color:"#7fb8d8", bg:null});
+    spriteAt(sp, r.labelAt[0], r.labelAt[1], 6, 0.9);
+  }
+  for(const [name,lon,lat,lv] of CITIES){
+    const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG;
+    const r=lv===1?0.75:lv===2?0.55:0.4;
+    const dot=new THREE.Mesh(new THREE.SphereGeometry(r,10,8), new THREE.MeshBasicMaterial({color:lv===1?0xf0e6c8:0xaebccb}));
+    dot.position.set(x,y+0.4,z); worldGroup.add(dot);
+    const ring=new THREE.Mesh(new THREE.RingGeometry(r*1.6,r*2.1,20), new THREE.MeshBasicMaterial({color:0xf0e6c8, transparent:true, opacity:lv===1?0.7:0, side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2; ring.position.set(x,y+0.35,z); worldGroup.add(ring);
+    const sp=makeLabel(name,{fs:lv===1?44:lv===2?36:30, color:lv===1?"#f5f2e6":"#c3cbd4", bg:"rgba(8,12,18,0.5)", border:"rgba(255,255,255,0.1)"});
+    spriteAt(sp, lon, lat, lv===1?5.2:lv===2?4.2:3.4, 1.6+r);
+  }
+}
+
+/* ================= 敌军纵队 ================= */
+const enemyLayer=new THREE.Group(); worldGroup.add(enemyLayer);
+/* 战斗期间让战场附近的部队标签淡出，避免遮挡交战 */
+const battleFadeList=[];
+function registerFadeLabel(sp, wx, wz, h){
+  battleFadeList.push({sp, wx, wz, h:h||0, baseOp:1, baseScale:sp.scale.clone()});
+}
+const histLayer=new THREE.Group(); worldGroup.add(histLayer);
+const activeColumns=[];
+function makeFlagSprite(color=0xe6edf5, isRed){
+  const cnv=document.createElement("canvas"); cnv.width=140; cnv.height=160;
+  const c=cnv.getContext("2d");
+  c.strokeStyle= isRed ? "#e8b98a" : "#aab4be"; c.lineWidth=6;
+  c.beginPath(); c.moveTo(20,150); c.lineTo(20,14); c.stroke();
+  c.fillStyle= isRed ? "#ff3b30" : "#"+color.toString(16).padStart(6,"0");
+  c.beginPath(); c.moveTo(23,16); c.lineTo(126,40); c.lineTo(23,66); c.closePath(); c.fill();
+  c.strokeStyle= isRed ? "rgba(255,190,150,0.95)" : "rgba(210,225,240,0.9)"; c.lineWidth=3; c.stroke();
+  if(isRed){
+    /* 红军旗：金色五角星 */
+    c.fillStyle="#ffd76a";
+    c.beginPath();
+    for(let i=0;i<10;i++){
+      const a=-Math.PI/2+i*Math.PI/5, r=i%2===0?11:4.6;
+      const px=52+ r*Math.cos(a), py=40+ r*Math.sin(a);
+      i?c.lineTo(px,py):c.moveTo(px,py);
+    }
+    c.closePath(); c.fill();
+  } else {
+    c.fillStyle="#eef4fa"; c.beginPath(); c.arc(52,40,11,0,7); c.fill();
+    c.fillStyle="#2b4a66"; c.beginPath(); c.arc(52,40,5,0,7); c.fill();
+  }
+  const tex=new THREE.CanvasTexture(cnv);
+  return new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+}
+/* 小兵贴图：鲜亮阵营配色 + 脚下发光底座色块（远看一眼分红蓝） */
+function makeSoldierTexture(uniform, helmet, isRed){
+  const c=document.createElement("canvas"); c.width=56; c.height=80;
+  const x=c.getContext("2d");
+  x.beginPath(); x.ellipse(28,70,27,10,0,0,7);
+  x.fillStyle = isRed ? "rgba(255,45,28,0.62)" : "rgba(230,242,252,0.6)";
+  x.fill();
+  x.lineWidth=2.4;
+  x.strokeStyle = isRed ? "rgba(255,140,110,0.95)" : "rgba(140,190,240,0.95)";
+  x.stroke();
+  x.translate(4,4);
+  x.fillStyle=helmet;
+  x.beginPath(); x.arc(24,14,9,Math.PI,0); x.closePath(); x.fill();
+  x.fillRect(13,14,22,3);
+  x.fillStyle="#f4d7b8"; x.fillRect(20,17,8,6);
+  x.fillStyle=uniform;
+  x.beginPath(); x.moveTo(16,24); x.lineTo(32,24); x.lineTo(34,46); x.lineTo(14,46); x.closePath(); x.fill();
+  x.fillStyle="rgba(15,15,15,.9)"; x.fillRect(15,33,18,3);
+  x.fillStyle="#2e343b"; x.fillRect(17,46,5,14); x.fillRect(26,46,5,14);
+  x.strokeStyle="#101010"; x.lineWidth=2.8; x.lineCap="round";
+  x.beginPath(); x.moveTo(33,22); x.lineTo(44,53); x.stroke();
+  x.fillStyle = isRed ? "#ffd76a" : "#dce9f7";
+  x.beginPath(); x.arc(24,10.5,2.7,0,7); x.fill();
+  const t=new THREE.CanvasTexture(c); t.anisotropy=4;
+  return t;
+}
+const graySoldTex = makeSoldierTexture("#f2f6fb","#46698c",false);
+const redSoldTex  = makeSoldierTexture("#ff3b30","#8f1408",true);
+
+/* ================= 兵力具象化：整块士兵方阵贴图（每小兵≈5000人） ================= */
+function makeFormationTexture(count, isRed){
+  const COLS=6, cw=56, ch=86;
+  count=Math.max(1,Math.min(48,Math.round(count)));
+  const rows=Math.ceil(count/COLS), cols=Math.min(COLS,count);
+  const cnv=document.createElement("canvas");
+  cnv.width=cols*cw; cnv.height=rows*ch;
+  const c=cnv.getContext("2d");
+  for(let k=0;k<count;k++){
+    const ox=(k%COLS)*cw, oy=Math.floor(k/COLS)*ch;
+    c.beginPath(); c.ellipse(ox+28, oy+74, 25, 9, 0, 0, 7);
+    c.fillStyle = isRed ? "rgba(255,45,28,0.62)" : "rgba(230,242,252,0.62)";
+    c.fill();
+    c.lineWidth=2.2;
+    c.strokeStyle = isRed ? "rgba(255,140,110,0.95)" : "rgba(140,190,240,0.95)";
+    c.stroke();
+    c.fillStyle = isRed ? "#8f1408" : "#46698c";
+    c.beginPath(); c.arc(ox+24, oy+14, 9, Math.PI, 0); c.closePath(); c.fill();
+    c.fillRect(ox+13, oy+14, 22, 3);
+    c.fillStyle="#f4d7b8"; c.fillRect(ox+20, oy+17, 8, 6);
+    c.fillStyle = isRed ? "#ff3b30" : "#f2f6fb";
+    c.beginPath(); c.moveTo(ox+16,oy+24); c.lineTo(ox+32,oy+24); c.lineTo(ox+34,oy+46); c.lineTo(ox+14,oy+46); c.closePath(); c.fill();
+    c.fillStyle="rgba(15,15,15,.9)"; c.fillRect(ox+15, oy+33, 18, 3);
+    c.fillStyle="#2e343b"; c.fillRect(ox+17, oy+46, 5, 14); c.fillRect(ox+26, oy+46, 5, 14);
+    c.strokeStyle="#101010"; c.lineWidth=2.8; c.lineCap="round";
+    c.beginPath(); c.moveTo(ox+33, oy+22); c.lineTo(ox+44, oy+53); c.stroke();
+    c.fillStyle = isRed ? "#ffd76a" : "#dce9f7";
+    c.beginPath(); c.arc(ox+24, oy+10.5, 2.7, 0, 7); c.fill();
+  }
+  const t=new THREE.CanvasTexture(cnv); t.anisotropy=4;
+  return {tex:t, aspect:cnv.width/cnv.height, rows};
+}
+/* 方阵 sprite：屏幕占比随镜头距离自动补偿——上帝视角/跟随视角下大小恒定、清晰可见 */
+const formationUnits=[];
+function addFormationSprite(parent, nWan, isRed, x, gy, z){
+  const count=Math.max(2, Math.min(48, Math.round((nWan||1.2)*4)));
+  const f=makeFormationTexture(count, isRed);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:f.tex, transparent:true, depthTest:false}));
+  sp.renderOrder=57;
+  sp.userData.aspect=f.aspect; sp.userData.rows=f.rows; sp.userData.gy=gy;
+  sp.userData.count=count;
+  sp.position.set(x, gy, z);
+  parent.add(sp);
+  formationUnits.push(sp);
+  return sp;
+}
+function updateFormations(){
+  const half=Math.tan(camera.fov*Math.PI/360);
+  for(const sp of formationUnits){
+    const d=camera.position.distanceTo(sp.position);
+    /* 屏幕占比随兵力数量增长：兵越多，方阵越大（并设下限保证小部队也看得见） */
+    const k=Math.min(0.20, Math.max(0.055, 0.055+0.011*Math.sqrt(sp.userData.count)));
+    const hW=2*d*half*k;
+    sp.scale.set(hW*sp.userData.aspect, hW, 1);
+    sp.position.y=sp.userData.gy+hW*0.42;
+  }
+}
+
+function addEnemyColumn(spec){
+  const g=new THREE.Group(); enemyLayer.add(g);
+  /* 记录初始不透明度（淡入淡出基准） */
+  g.traverse(o=>{ if(o.material){ o.userData.baseOp=o.material.opacity??1; } });
+  if(spec.type==="line"){
+    const ln=lineFromLons(spec.pts, 0xe8f0f7, {opacity:0.55, lift:0.5});
+    g.add(ln);
+    const mid=spec.pts[Math.floor(spec.pts.length/2)];
+    const sp=makeLabel(spec.name, {fs:26,kind:"troop",theme:"enemy"});
+    spriteAt(sp, mid[0], mid[1], 4.6, 2.2);
+    g.add(sp);
+    const [lx,lz]=lonLat2xy(mid[0],mid[1]);
+    registerFadeLabel(sp, lx, lz, 2.2);
+    addFormationSprite(g, spec.n||6, false, lx, heightFinal(mid[0],mid[1])*EXAG+0.8, lz);
+    return null;
+  }
+  if(spec.type==="ring"){
+    const [x,z]=lonLat2xy(spec.at[0],spec.at[1]); const y=heightFinal(spec.at[0],spec.at[1])*EXAG+0.4;
+    const rings=[];
+    for(let i=0;i<2;i++){
+      const r=new THREE.Mesh(new THREE.RingGeometry(0.9,1,48), new THREE.MeshBasicMaterial({color:0xff5a4a, transparent:true, opacity:0.8, side:THREE.DoubleSide, depthWrite:false}));
+      r.rotation.x=-Math.PI/2; r.position.set(x,y,z); g.add(r); rings.push(r);
+    }
+    const sp=makeLabel(spec.label, {fs:28,kind:"troop",theme:"red"});
+    spriteAt(sp, spec.at[0], spec.at[1], 4.8, 4.5);
+    g.add(sp);
+    g.userData.anim=(t)=>{
+      rings.forEach((r,i)=>{
+        const k=((t*0.5+i*0.5)%1);
+        r.scale.setScalar(3+k*16);
+        r.material.opacity=0.85*(1-k);
+      });
+    };
+    activeColumns.push({group:g, spec, static:true});
+    return g;
+  }
+  if(spec.type==="blob"){
+    const [x,z]=lonLat2xy(spec.at[0],spec.at[1]); const y=heightFinal(spec.at[0],spec.at[1])*EXAG;
+    const n=spec.n||1.2;
+    const r=3.0+3.4*Math.sqrt(n);        /* 圆盘半径∝√兵力 */
+    const disc=new THREE.Mesh(new THREE.CircleGeometry(r,26), new THREE.MeshBasicMaterial({color:0xe8f0f8, transparent:true, opacity:0.42, side:THREE.DoubleSide, depthWrite:false}));
+    disc.rotation.x=-Math.PI/2; disc.position.set(x,y+0.5,z); g.add(disc);
+    const rim=new THREE.Mesh(new THREE.RingGeometry(r*0.94,r*1.06,40), new THREE.MeshBasicMaterial({color:0xbcd6ee, transparent:true, opacity:0.6, side:THREE.DoubleSide, depthWrite:false}));
+    rim.rotation.x=-Math.PI/2; rim.position.set(x,y+0.55,z); g.add(rim);
+    /* 兵力方阵：每小兵≈5000人，规模一眼可见 */
+    addFormationSprite(g, n, false, x, y+0.8, z);
+    const sp=makeLabel(spec.name, {fs:27,kind:"troop",theme:"enemy"});
+    spriteAt(sp, spec.at[0], spec.at[1], 4.8, r+4.8);
+    g.add(sp);
+    registerFadeLabel(sp, x, z, r+4.8);
+    const sp2=makeLabel(spec.sub,{fs:24,color:"#aab8c6",bg:null,weight:400});
+    spriteAt(sp2, spec.at[0], spec.at[1], 3.4, r+1.6);
+    g.add(sp2);
+    g.userData.window=spec.t;
+    activeColumns.push({group:g, spec, static:true});
+    return g;
+  }
+  /* 机动纵队：旗帜/标签大小按兵力（n=万人）量级缩放 */
+  const curve=kmCurve(spec.route, 160, 1.0);
+  const N=150, pts=curve.getPoints(N);
+  const tg=new THREE.BufferGeometry().setFromPoints(pts);
+  const trail=new THREE.Line(tg, new THREE.LineDashedMaterial({color:0xe8f0f7, dashSize:1.8, gapSize:1.4, transparent:true, opacity:0.75}));
+  trail.computeLineDistances(); g.add(trail);
+  const n=spec.n||1.2;
+  const s=2.6+2.1*Math.sqrt(n);          /* 旗高∝√兵力 */
+  const nh=3.0+s*0.22;                    /* 标签高随旗 */
+  const fy=1.2+s*0.55;                    /* 旗杆高 */
+  const flag=makeFlagSprite(); flag.scale.set(s, s*1.15, 1); g.add(flag);
+  const nameSp=makeLabel(spec.name, {fs:26,kind:"troop",theme:"enemy"});
+  nameSp.scale.set(nameSp.material.map.image.width/nameSp.material.map.image.height*nh, nh, 1); g.add(nameSp);
+  registerFadeLabel(nameSp, curve.getPointAt(0.001).x, curve.getPointAt(0.001).z, 0);
+  const arrow=new THREE.Mesh(new THREE.ConeGeometry(0.8,2.2,6), new THREE.MeshBasicMaterial({color:0xd8e0e8}));
+  arrow.scale.setScalar(Math.max(1, s/4.2));
+  g.add(arrow);
+  /* 行军兵力方阵：整块随纵队推进（每小兵≈5000人） */
+  const p0=curve.getPointAt(0.001);
+  const form=addFormationSprite(g, spec.n, false, p0.x, p0.y+0.6, p0.z);
+  form.visible=false;
+  const col={group:g, spec, curve, trail, flag, nameSp, arrow, N, s, nh, fy, form};
+  activeColumns.push(col);
+  return col;
+}
+function updateBattleFade(){
+  const bf=battleFocus;
+  const active=!!bf;
+  const bx=bf?bf.tx:0, bz=bf?bf.tz:0;
+  /* 战斗时战场附近标签淡出并缩小；战斗结束后恢复 */
+  const R=30;
+  for(const it of battleFadeList){
+    if(!it.sp || !it.sp.material) continue;
+    const dx=it.sp.position.x-bx, dz=it.sp.position.z-bz;
+    const d=Math.sqrt(dx*dx+dz*dz);
+    let op=1, sc=1;
+    if(active){
+      const f=Math.max(0, Math.min(1, (d-R*0.4)/(R*0.6)));
+      op=0.05+0.95*f;
+      sc=0.40+0.60*f;
+    }
+    it.sp.material.opacity=op;
+    it.sp.visible=op>0.08;
+    if(it.baseScale) it.sp.scale.set(it.baseScale.x*sc, it.baseScale.y*sc, 1);
+  }
+  /* 战斗聚焦时缩小红星旁的军旗，避免遮挡交战 */
+  const rf=comet.userData.redFlag;
+  if(rf){
+    const want=active?0.34:1;
+    rf.scale.set(4.6*want, 5.2*want, 1);
+    rf.position.set(3.2*want, 4.8*want, 0);
+  }
+}
+
+function updateEnemies(t){
+  for(const col of activeColumns){
+    const g=col.group;
+    if(g.userData.anim){ g.userData.anim(perfNow); continue; }
+    if(g.userData.window){
+      /* 定驻部队：淡入淡出，避免硬切换 */
+      const [a,b]=g.userData.window;
+      const fin=Math.max(0,Math.min(1,(t-(a-0.05))/0.06));
+      const fout=Math.max(0,Math.min(1,((b+0.03)-t)/0.06));
+      const op=Math.min(fin,fout);
+      g.visible=op>0.02;
+      g.traverse(o=>{ if(o.material && o.material.transparent!==undefined && !o.userData.isWater){ o.material.opacity=op*(o.userData.baseOp??1); } });
+      continue;
+    }
+    if(col.static) continue;
+    const [a,b]=col.spec.t;
+    const f=Math.max(0, Math.min(1, (t-a)/Math.max(1e-4,(b-a))));
+    const visible = t>=a-0.01;
+    g.visible=visible;
+    if(!visible) continue;
+    const p=col.curve.getPointAt(Math.max(0.001,f));
+    col.flag.position.set(p.x,p.y+col.fy,p.z);
+    col.nameSp.position.set(p.x,p.y+col.fy+col.s*0.6+col.nh*0.62,p.z);
+    col.arrow.position.copy(p);
+    const qb=col.curve.getPointAt(Math.max(0.001, f-0.012));
+    col.form.visible=true;
+    col.form.position.x=qb.x; col.form.position.z=qb.z;
+    col.form.userData.gy=qb.y+0.6;
+    const tan=col.curve.getTangentAt(Math.max(0.001,f));
+    col.arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), tan);
+    col.trail.geometry.setDrawRange(0, Math.max(2, Math.floor(f*col.N)+1));
+  }
+}
+function clearEnemies(){ activeColumns.length=0; formationUnits.length=0; battleFadeList.length=0; while(enemyLayer.children.length) enemyLayer.remove(enemyLayer.children[0]); }
+
+/* ================= 红军路线 / 彗星 / 事件 ================= */
+const routeLayer=new THREE.Group(); worldGroup.add(routeLayer);
+const markLayer=new THREE.Group(); worldGroup.add(markLayer);
+const fxLayer=new THREE.Group(); worldGroup.add(fxLayer);
+const routeObjs=[];  /* {mesh,glow,curve,len,idxTotal,samples} */
+
+function buildRoutes(){
+  PHASES.forEach(p=>{
+    if(!p.route){ routeObjs.push(null); return; }
+    const curve=kmCurve(p.route, 300, 1.15);
+    const tub=Math.min(420, Math.max(80, Math.floor(curve.getLength())));
+    const geo=new THREE.TubeGeometry(curve, tub, 0.5, 6, false);
+    const mesh=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0xff4a3d, transparent:true, opacity:0.95}));
+    const glow=new THREE.Mesh(new THREE.TubeGeometry(curve, tub, 1.4, 6, false),
+      new THREE.MeshBasicMaterial({color:0xff6a55, transparent:true, opacity:0.13, blending:THREE.AdditiveBlending, depthWrite:false}));
+    mesh.visible=glow.visible=false;
+    routeLayer.add(mesh); routeLayer.add(glow);
+    const samples=[];
+    const SN=800;
+    for(let i=0;i<=SN;i++) samples.push(curve.getPointAt(i/SN));
+    routeObjs.push({mesh, glow, curve, tub, samples, SN});
+  });
+}
+/* 彗星红星 */
+const comet=new THREE.Group(); worldGroup.add(comet);
+{
+  const cnv=document.createElement("canvas"); cnv.width=128; cnv.height=128;
+  const c=cnv.getContext("2d");
+  const grd=c.createRadialGradient(64,64,2,64,64,62);
+  grd.addColorStop(0,"rgba(255,120,90,0.95)"); grd.addColorStop(0.35,"rgba(255,74,60,0.5)"); grd.addColorStop(1,"rgba(255,60,40,0)");
+  c.fillStyle=grd; c.fillRect(0,0,128,128);
+  const tex=new THREE.CanvasTexture(cnv);
+  const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false, blending:THREE.AdditiveBlending}));
+  halo.scale.set(13,13,1); halo.renderOrder=63; comet.add(halo);
+  const s=new THREE.Mesh(new THREE.SphereGeometry(1.35,14,12), new THREE.MeshBasicMaterial({color:0xff5a48, depthTest:false}));
+  s.renderOrder=50;
+  comet.add(s);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(1.9,2.15,26), new THREE.MeshBasicMaterial({color:0xff8d7e, transparent:true, opacity:0.75, side:THREE.DoubleSide, depthWrite:false, depthTest:false}));
+  ring.renderOrder=51;
+  ring.rotation.x=-Math.PI/2; comet.add(ring);
+  comet.userData.ring=ring;
+  comet.userData.redTag=null;
+  /* 红军军旗：红旗金星，与国军白旗形成最强阵营识别 */
+  const redFlag=makeFlagSprite(0xff3b30,true);
+  redFlag.scale.set(4.6,5.2,1); redFlag.position.set(3.2,4.8,0); redFlag.renderOrder=63;
+  comet.userData.redFlag=redFlag;
+  comet.add(redFlag);
+  comet.position.set(...lonLat2xy(C.zunyi[0],C.zunyi[1]), heightFinal(C.zunyi[0],C.zunyi[1])*EXAG+1.2);
+}
+/* 兵力以小兵图标阵列表示（不出现数字）：1 个小兵 = 5000 人 */
+function soldierRow(container, nWan, isRed){
+  container.innerHTML="";
+  container.classList.add("mini-row");
+  const n=Math.max(1, Math.min(60, Math.round(nWan*2)));
+  for(let k=0;k<n;k++){
+    const s=document.createElement("i");
+    s.className="mini-soldier"+(isRed?" red":"");
+    container.appendChild(s);
+  }
+  const cap=document.createElement("span");
+  cap.className="mini-cap";
+  cap.textContent="共 "+n+" 个小兵";
+  container.appendChild(cap);
+}
+
+/* 红军兵力标签：按章节史实数字动态更新（遵义3.7万→扎西整编3万余→渡金沙江3万余） */
+function setRedTag(text){
+  if(comet.userData.redTag){
+    comet.remove(comet.userData.redTag);
+    comet.userData.redTag.material.map.dispose();
+    comet.userData.redTag.material.dispose();
+  }
+  const t=makeLabel(text,{fs:26,kind:"troop",theme:"red"});
+  t.position.set(0,7.8,0);
+  t.scale.set(t.material.map.image.width/t.material.map.image.height*4.4,4.4,1);
+  t.renderOrder=64;
+  comet.add(t);
+  comet.userData.redTag=t;
+}
+/* 红军兵力方阵：按章节史实兵力重建（每小兵≈5000人），紧随红星推进 */
+const RED_WAN=[3.7,3.7,3.0,3.0,3.0,3.0,3.0];
+let redForm=null;
+function setRedFormation(i){
+  if(redForm){
+    const idx=formationUnits.indexOf(redForm); if(idx>=0) formationUnits.splice(idx,1);
+    worldGroup.remove(redForm);
+    redForm.material.map.dispose(); redForm.material.dispose();
+  }
+  redForm=addFormationSprite(worldGroup, RED_WAN[i]||3.0, true, 0,0,0);
+  redForm.visible=false;
+}
+const trailDots=[];
+for(let i=0;i<9;i++){
+  const d=new THREE.Mesh(new THREE.SphereGeometry(0.5-i*0.04,8,6), new THREE.MeshBasicMaterial({color:0xff8d7e, transparent:true, opacity:0.4-i*0.035}));
+  trailDots.push(d); worldGroup.add(d);
+}
+const cometLight=new THREE.PointLight(0xff5040, 2.6, 46, 2);
+worldGroup.add(cometLight);
+
+/* 事件标记 */
+const anims=[];
+function ringRipple(lon,lat,color){
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG+0.35;
+  for(let i=0;i<3;i++){
+    const r=new THREE.Mesh(new THREE.RingGeometry(0.9,1.08,36), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.9, side:THREE.DoubleSide, depthWrite:false}));
+    r.rotation.x=-Math.PI/2; r.position.set(x,y,z); fxLayer.add(r);
+    const t0=perfNow+i*0.28;
+    anims.push({
+      update(){
+        const k=(perfNow-t0)/1.1;
+        if(k<0) return true;
+        if(k>=1){ fxLayer.remove(r); r.geometry.dispose(); r.material.dispose(); return false; }
+        r.scale.setScalar(1+k*16);
+        r.material.opacity=0.9*(1-k);
+        return true;
+      }
+    });
+  }
+}
+function popIn(obj){
+  const bb=()=>obj.userData.b?BOOST:1;
+  obj.scale.setScalar(0.01*bb()); const t0=perfNow;
+  anims.push({update(){ const k=Math.min(1,(perfNow-t0)/0.5); const e=1-Math.pow(1-k,3); obj.scale.setScalar(e*bb()); return k<1; }});
+}
+function crossBadge(n, lon, lat){
+  const ch=["渡","一","二","三","四"][n]||"渡";
+  const cnv=document.createElement("canvas"); cnv.width=128; cnv.height=128;
+  const c=cnv.getContext("2d");
+  c.beginPath(); c.arc(64,64,58,0,7); c.fillStyle="rgba(18,12,6,0.88)"; c.fill();
+  c.lineWidth=8; c.strokeStyle="#e6c887"; c.stroke();
+  c.beginPath(); c.arc(64,64,44,0,7); c.lineWidth=2; c.strokeStyle="rgba(230,200,135,0.5)"; c.stroke();
+  c.fillStyle="#f0dca6"; c.font='700 66px "KaiTi","STKaiti",serif'; c.textAlign="center"; c.textBaseline="middle";
+  c.shadowColor="rgba(240,220,166,0.8)"; c.shadowBlur=14;
+  c.fillText(ch,64,68);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cnv), transparent:true, depthTest:false}));
+  sp.renderOrder=70;
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG;
+  sp.position.set(x,y+3.4,z);
+  const sc=n===0?6.2:4.6;
+  sp.scale.set(sc,sc,1);
+  markLayer.add(sp); popIn(sp);
+  return sp;
+}
+function battleMark(title, sub, lon, lat){
+  const g=new THREE.Group();
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG+0.8;
+  const pulse=new THREE.Mesh(new THREE.RingGeometry(1.6,1.85,32), new THREE.MeshBasicMaterial({color:0xffb199, transparent:true, opacity:0.85, side:THREE.DoubleSide, depthWrite:false}));
+  pulse.rotation.x=-Math.PI/2; pulse.position.set(x,y,z); g.add(pulse);
+  g.userData.pulse=pulse;
+  const cnv=document.createElement("canvas"); cnv.width=96; cnv.height=96;
+  const c=cnv.getContext("2d");
+  c.beginPath(); c.arc(48,48,38,0,7); c.fillStyle="rgba(18,10,8,0.85)"; c.fill();
+  c.lineWidth=6; c.strokeStyle="#ffb199"; c.stroke();
+  c.strokeStyle="#ffcebe"; c.lineWidth=9; c.lineCap="round";
+  c.beginPath(); c.moveTo(30,30); c.lineTo(66,66); c.moveTo(66,30); c.lineTo(30,66); c.stroke();
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cnv), transparent:true, depthTest:false}));
+  sp.renderOrder=70; sp.position.set(x,y+0.6,z); sp.scale.set(0.8,0.8,1); g.add(sp);
+  const t1=makeLabel(title,{fs:32,color:"#ffcebe",bg:"rgba(30,10,8,0.68)",border:"rgba(255,177,153,0.45)"});
+  t1.position.set(x,y-19.0,z); t1.scale.set(t1.material.map.image.width/t1.material.map.image.height*1.7,1.7,1); g.add(t1);
+  const t2=makeLabel(sub,{fs:22,color:"#d8a394",bg:null,weight:400});
+  t2.position.set(x,y-22.4,z); t2.scale.set(t2.material.map.image.width/t2.material.map.image.height*1.2,1.2,1); g.add(t2);
+  markLayer.add(g); popIn(g);
+  return g;
+}
+function noteMark(title, sub, lon, lat){
+  const g=new THREE.Group();
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG+0.8;
+  const dot=new THREE.Mesh(new THREE.SphereGeometry(0.55,10,8), new THREE.MeshBasicMaterial({color:0xe6c887}));
+  dot.position.set(x,y+1,z); g.add(dot);
+  const t1=makeLabel(title,{fs:30,color:"#f0dca6",bg:"rgba(26,18,8,0.66)",border:"rgba(230,200,135,0.45)"});
+  t1.position.set(x,y+5.4,z); t1.scale.set(t1.material.map.image.width/t1.material.map.image.height*4.2,4.2,1); g.add(t1);
+  const t2=makeLabel(sub,{fs:22,color:"#c9b28a",bg:null,weight:400});
+  t2.position.set(x,y+3.1,z); t2.scale.set(t2.material.map.image.width/t2.material.map.image.height*3.2,3.2,1); g.add(t2);
+  markLayer.add(g); popIn(g);
+}
+function victoryMark(title, sub, lon, lat){
+  const g=new THREE.Group();
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG+0.4;
+  const rays=new THREE.Group();
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    const l=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,2.2,4), new THREE.MeshBasicMaterial({color:0xf0dca6}));
+    l.position.set(Math.cos(a)*2.6, Math.sin(a)*2.6, 0);
+    l.rotation.z=a+Math.PI/2;
+    rays.add(l);
+  }
+  rays.position.set(x,y+2.2,z); g.add(rays); g.userData.rays=rays;
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(1.5,24), new THREE.MeshBasicMaterial({color:0x171009, side:THREE.DoubleSide}));
+  disc.position.set(x,y+2.2,z); g.add(disc);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(1.4,1.62,28), new THREE.MeshBasicMaterial({color:0xe6c887, side:THREE.DoubleSide}));
+  ring.position.set(x,y+2.2,z); g.add(ring);
+  const t1=makeLabel(title,{fs:32,color:"#f6e7bd",bg:"rgba(26,18,8,0.72)",border:"rgba(230,200,135,0.6)"});
+  t1.position.set(x,y+7,z); t1.scale.set(t1.material.map.image.width/t1.material.map.image.height*5,5,1); g.add(t1);
+  const t2=makeLabel(sub,{fs:22,color:"#d8c49a",bg:null,weight:400});
+  t2.position.set(x,y+4.4,z); t2.scale.set(t2.material.map.image.width/t2.material.map.image.height*3.4,3.4,1); g.add(t2);
+  markLayer.add(g); popIn(g);
+  return g;
+}
+function feintArrow(from,to,title,sub){
+  const pts=[from,to].map(([lo,la])=>{ const [x,z]=lonLat2xy(lo,la); return new THREE.Vector3(x,heightFinal(lo,la)*EXAG+0.8,z); });
+  const g=new THREE.BufferGeometry().setFromPoints([pts[0], pts[1]]);
+  const line=new THREE.Line(g, new THREE.LineDashedMaterial({color:0xff8d7e, dashSize:2, gapSize:1.4, transparent:true, opacity:0.95}));
+  line.computeLineDistances(); fxLayer.add(line);
+  const cone=new THREE.Mesh(new THREE.ConeGeometry(0.9,2.4,8), new THREE.MeshBasicMaterial({color:0xff8d7e}));
+  cone.position.copy(pts[1]);
+  const dir=pts[1].clone().sub(pts[0]).normalize();
+  cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+  fxLayer.add(cone);
+  const t1=makeLabel(title,{fs:30,color:"#ffd0c2",bg:"rgba(30,10,8,0.6)",border:"rgba(255,141,126,0.5)"});
+  t1.position.copy(pts[1]).add(new THREE.Vector3(0,4.6,0));
+  t1.scale.set(t1.material.map.image.width/t1.material.map.image.height*4.4,4.4,1);
+  fxLayer.add(t1);
+  const t0=perfNow;
+  anims.push({update(){
+    const k=(perfNow-t0)/4;
+    if(k>=1){ [line,cone,t1].forEach(o=>{fxLayer.remove(o);}); return false; }
+    if(k>0.7){ const o=1-(k-0.7)/0.3; line.material.opacity=0.95*o; cone.material.opacity=1; t1.material.opacity=o; }
+    return true;
+  }});
+}
+function alarmRing(lon,lat){
+  const [x,z]=lonLat2xy(lon,lat); const y=heightFinal(lon,lat)*EXAG+0.4;
+  const g=new THREE.Group(); g.position.set(x,y,z);
+  for(let i=0;i<2;i++){
+    const r=new THREE.Mesh(new THREE.RingGeometry(0.92,1,44), new THREE.MeshBasicMaterial({color:0xff5a4a, transparent:true, opacity:0.85, side:THREE.DoubleSide, depthWrite:false}));
+    r.rotation.x=-Math.PI/2; r.userData.off=i*0.5; g.add(r);
+  }
+  g.userData.isAlarm=true;
+  fxLayer.add(g);
+  anims.push({update(){
+    g.children.forEach(r=>{
+      const k=((perfNow*0.45+r.userData.off)%1);
+      r.scale.setScalar(3+k*15);
+      r.material.opacity=0.85*(1-k);
+    });
+    return true;
+  }});
+  return g;
+}
+function clearFx(){
+  anims.length=0;
+  while(fxLayer.children.length) fxLayer.remove(fxLayer.children[0]);
+}
+
+/* ================= 战斗动画：枪战·爆炸·冲锋 ================= */
+/* 烟柱贴图（柔和的团状烟） */
+let smokeTex=null;
+function getSmokeTex(){
+  if(smokeTex) return smokeTex;
+  const cnv=document.createElement("canvas"); cnv.width=128; cnv.height=128;
+  const c=cnv.getContext("2d");
+  const g=c.createRadialGradient(64,64,4,64,64,62);
+  g.addColorStop(0,"rgba(60,52,48,0.92)");
+  g.addColorStop(0.45,"rgba(44,38,36,0.62)");
+  g.addColorStop(1,"rgba(36,32,30,0)");
+  c.fillStyle=g; c.fillRect(0,0,128,128);
+  smokeTex=new THREE.CanvasTexture(cnv);
+  return smokeTex;
+}
+/* 火焰贴图 */
+let flameTex=null;
+function getFlameTex(){
+  if(flameTex) return flameTex;
+  const cnv=document.createElement("canvas"); cnv.width=128; cnv.height=128;
+  const c=cnv.getContext("2d");
+  const g=c.createRadialGradient(64,72,2,64,64,60);
+  g.addColorStop(0,"rgba(255,246,206,0.98)");
+  g.addColorStop(0.28,"rgba(255,186,72,0.92)");
+  g.addColorStop(0.6,"rgba(228,96,32,0.55)");
+  g.addColorStop(1,"rgba(160,50,20,0)");
+  c.fillStyle=g; c.fillRect(0,0,128,128);
+  flameTex=new THREE.CanvasTexture(cnv);
+  return flameTex;
+}
+
+/* 一次战斗演出：在战场经纬度处展开双方阵线、交火、爆炸、冲锋，持续 dur 秒 */
+function battleScene(lon, lat, dur, opts){
+  opts=opts||{};
+  const [bx,bz]=lonLat2xy(lon,lat);
+  const by=heightFinal(lon,lat)*EXAG;
+  const g=new THREE.Group(); g.position.set(bx,by,bz);
+  fxLayer.add(g);
+
+  const R=opts.r||17.0;                 /* 交战半径（世界单位） */
+  const t0=perfNow;
+  const durS=dur||7;
+
+  /* 交战双方阵线：红军自北面压上，国军据守南面，正面交火 */
+  const redPos=[], whitePos=[];
+  const NR=Math.max(6,Math.round(R*1.5));
+  for(let i=0;i<NR;i++){
+    const u=i/(NR-1)-0.5;
+    /* 红军：北侧弧形推进线 */
+    const ar=-Math.PI/2 + u*2.2;
+    const rr=R*(1.05+0.1*Math.sin(i*2.3));
+    redPos.push(new THREE.Vector3(Math.cos(ar)*rr, 0, Math.sin(ar)*rr));
+    /* 国军：南侧弧形防线（正面相对） */
+    const br=Math.PI/2 + u*2.2;
+    whitePos.push(new THREE.Vector3(Math.cos(br)*rr*0.78, 0, Math.sin(br)*rr*0.78));
+  }
+  const redSold=[], whiteSold=[];
+  for(const p of redPos){
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:redSoldTex, transparent:true, depthTest:false}));
+    s.renderOrder=60; s.scale.set(1.5,2.1,1);
+    s.position.copy(p).setY(0.9); g.add(s); redSold.push(s);
+  }
+  for(const p of whitePos){
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:graySoldTex, transparent:true, depthTest:false}));
+    s.renderOrder=60; s.scale.set(1.5,2.1,1);
+    s.position.copy(p).setY(0.9); g.add(s); whiteSold.push(s);
+  }
+  /* 士兵尺寸随镜头距离补偿：任何高度下交战双方都清晰可见 */
+  const solScale=()=>{
+    const d=camera.position.distanceTo(g.position);
+    const k=Math.max(1, 2.6*Math.tan(camera.fov*Math.PI/360)*d/14);
+    return Math.min(4.5, k);
+  };
+
+  /* 曳光弹：从红方射向白方的短线段 */
+  const tracers=[];
+  const tracerCount=16;
+  for(let i=0;i<tracerCount;i++){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.16,3.4), new THREE.MeshBasicMaterial({color:0xfff0b0, transparent:true, opacity:0.9, depthTest:false}));
+    m.renderOrder=66; m.visible=false; g.add(m); tracers.push(m);
+  }
+  /* 爆炸体：火焰 + 烟柱 */
+  const blasts=[];
+  for(let i=0;i<7;i++){
+    const flame=new THREE.Sprite(new THREE.SpriteMaterial({map:getFlameTex(), transparent:true, depthTest:false, blending:THREE.AdditiveBlending}));
+    flame.renderOrder=67; flame.visible=false; g.add(flame);
+    const smoke=new THREE.Sprite(new THREE.SpriteMaterial({map:getSmokeTex(), transparent:true, depthTest:false}));
+    smoke.renderOrder=63; smoke.visible=false; g.add(smoke);
+    blasts.push({flame,smoke});
+  }
+  /* 弹着点火星 */
+  const sparks=[];
+  for(let i=0;i<26;i++){
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:getFlameTex(), transparent:true, depthTest:false, blending:THREE.AdditiveBlending}));
+    s.renderOrder=68; s.visible=false; g.add(s);
+    sparks.push({sp:s,v:new THREE.Vector3(),life:0});
+  }
+
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  /* 战斗用游戏时钟（累积 dt）推进，与渲染帧率无关，低帧率下也不会跳过过程 */
+  let gTime=0;
+  const spawnBlast=(px,py,pz)=>{
+    const b=blasts.find(b=>!b.flame.visible) || blasts[0];
+    b.flame.visible=true; b.smoke.visible=true;
+    b.flame.position.set(px,py+0.6,pz);
+    b.smoke.position.set(px,py+0.6,pz);
+    b.flame.material.opacity=1; b.smoke.material.opacity=0.9;
+    b.flame.scale.set(0.6,0.6,1); b.smoke.scale.set(0.6,0.6,1);
+    b.t=0; b.p=new THREE.Vector3(px,py,pz);
+    /* 火星四溅 */
+    for(let k=0;k<5;k++){
+      const sp=sparks.find(s=>s.life<=0); if(!sp) break;
+      sp.life=1;
+      sp.sp.visible=true; sp.sp.position.set(px,py+0.8,pz);
+      sp.v.set(rand(-3,3),rand(2,6),rand(-3,3));
+      sp.sp.scale.set(0.7,0.7,1);
+    }
+  };
+
+  const redAdvance=(opts.redAdvance!==false);
+  anims.push({update(dt){
+    gTime+=Math.min(0.12, dt||0.016);
+    const k=gTime/durS;
+    if(k>=1.18){ fxLayer.remove(g); return false; }
+
+    /* 1) 红军由西南推进（最后阶段冲锋压上） */
+    const adv=redAdvance ? Math.min(1, Math.max(0, (k-0.25)/0.6)) : 0;
+    const SS=solScale();
+    redSold.forEach((s,i)=>{
+      const p=redPos[i];
+      const nx=p.x*(1-adv*0.62), nz=p.z*(1-adv*0.62);
+      s.position.set(nx, 0.9*SS+0.12*Math.sin(gTime*9+i), nz);
+      /* 冲锋时前倾放大 */
+      const rush=adv>0.55?1+0.35*(adv-0.55)/0.45:1;
+      s.scale.set(1.15*SS*rush, 1.6*SS*rush, 1);
+    });
+    whiteSold.forEach((s,i)=>{
+      const p=whitePos[i];
+      /* 防线被压缩后个别士兵后撤/倒下 */
+      const fall=(k>0.72 && (i%3===0)) ? Math.min(1,(k-0.72)/0.18) : 0;
+      s.position.set(p.x*(1+fall*0.12), 0.9*SS- fall*0.75*SS, p.z*(1+fall*0.12));
+      s.material.opacity=1-fall*0.85;
+      s.scale.set(1.15*SS*(1-fall*0.3), 1.6*SS*(1-fall*0.3), 1);
+    });
+
+    /* 2) 交火：曳光弹往复飞 */
+    tracers.forEach((m,i)=>{
+      if(!m.visible){
+        if(Math.random()<0.30){
+          const a=Math.floor(Math.random()*redSold.length);
+          const b=Math.floor(Math.random()*whiteSold.length);
+          if(!redSold[a] || !whiteSold[b]) return;
+          m.userData.from=redSold[a].position.clone();
+          m.userData.to=whiteSold[b].position.clone();
+          m.userData.tt=0; m.visible=true;
+        }
+        return;
+      }
+      m.userData.tt+=Math.min(0.12,dt||0.016);
+      const u=m.userData.tt;
+      if(u>=1||!m.userData.from||!m.userData.to){ m.visible=false; return; }
+      const pos=m.userData.from.clone().lerp(m.userData.to,u);
+      pos.y+=0.9*SS+Math.sin(u*Math.PI)*0.5*SS;
+        m.position.copy(pos);
+      const dir=m.userData.to.clone().sub(m.userData.from).normalize();
+      m.lookAt(pos.clone().add(dir));
+      m.material.opacity=0.95*(1-u*0.75);
+      m.scale.set(SS,SS,SS);
+    });
+
+    /* 3) 爆炸：沿防线随机炸点 */
+    const blastEvery=0.42;
+    const bi=Math.floor(gTime/blastEvery);
+    if(bi!==g.userData.lastBi){
+      g.userData.lastBi=bi;
+      const a=Math.floor(Math.random()*redSold.length), b=Math.floor(Math.random()*whiteSold.length);
+      if(!redSold[a] || !whiteSold[b]) return true;
+      const mid=redSold[a].position.clone().lerp(whiteSold[b].position, 0.35+Math.random()*0.5);
+      spawnBlast(mid.x, 0.3*SS, mid.z);
+    }
+    blasts.forEach(b=>{
+      if(!b.flame.visible) return;
+      b.t+=Math.min(0.12,dt||0.016);
+      const bt=b.t;
+      if(bt>2.2){ b.flame.visible=false; b.smoke.visible=false; return; }
+      const fk=Math.min(1,bt/0.16), fe=1-Math.pow(1-fk,3);
+      b.flame.scale.set((0.5+fe*1.1)*SS, (0.5+fe*1.1)*SS, 1);
+      b.flame.material.opacity=Math.max(0, 1-Math.max(0,(bt-0.16)/0.9));
+      b.smoke.scale.set((0.5+bt*1.5)*SS, (0.5+bt*1.5)*SS, 1);
+      b.smoke.position.y=(0.6+bt*1.4)*SS;
+      b.smoke.material.opacity=Math.max(0,0.9-bt*0.36);
+      b.smoke.material.rotation=bt*0.5;
+    });
+
+    /* 4) 火星抛物线 */
+    sparks.forEach(sp=>{
+      if(sp.life<=0) return;
+      sp.life-=Math.min(0.12,dt||0.016);
+      sp.v.y-=9*Math.min(0.12,dt||0.016);
+      sp.sp.position.addScaledVector(sp.v,Math.min(0.12,dt||0.016));
+      sp.sp.material.opacity=Math.max(0,sp.life);
+      sp.sp.scale.setScalar(0.7*Math.max(0.2,sp.life));
+      if(sp.life<=0) sp.sp.visible=false;
+    });
+    return true;
+  }});
+  return g;
+}
+
+/* 战斗聚焦：战斗事件触发时短暂推近战场，结束后回到章节窗口（只平移缩放，不旋转） */
+let battleFocus=null;
+function focusBattle(lon,lat,dur){
+  const [tx,tz]=lonLat2xy(lon,lat);
+  battleFocus={tx, tz, ty:heightFinal(lon,lat)*EXAG, h:82, t0:perfNow, dur:dur||6.5};
+}
+function battleFocusPose(){
+  if(!battleFocus) return null;
+  const k=(perfNow-battleFocus.t0)/battleFocus.dur;
+  if(k>=1){ battleFocus=null; return null; }
+  /* 前 14% 推近、后 20% 拉回；用 smoothstep 缓动，进出镜头都平滑无顿挫 */
+  let f=1;
+  if(k<0.22) f=smooth(k/0.22);
+  else if(k>0.78) f=1-smooth((k-0.78)/0.22);
+  const mp=mapPoseOf(PHASES[phase]);
+  return {
+    tx:mp.tx+(battleFocus.tx-mp.tx)*f,
+    ty:mp.ty+(battleFocus.ty-mp.ty)*f,
+    tz:mp.tz+(battleFocus.tz-mp.tz)*f,
+    h:mp.h+(battleFocus.h-mp.h)*f,
+    focus:f
+  };
+}
+/* 战斗进行中：冻结章节推进，让战斗动画完整演完（至少 minSec 秒） */
+let battleHoldUntil=0;
+function battleHolding(){ return perfNow < battleHoldUntil; }
+
+function fireEvent(ev, withFx){
+  if(ev.type==="battle"){ battleMark(ev.title, ev.sub, ev.at[0], ev.at[1]); if(withFx){ const BD=(ev.dur||7); battleScene(ev.at[0], ev.at[1], BD, {r:ev.r}); focusBattle(ev.at[0], ev.at[1], BD+1.5); battleHoldUntil=perfNow+BD+1.5; flash(ev.title, ev.sub); } }
+  else if(ev.type==="cross"){ crossBadge(ev.n, ev.at[0], ev.at[1]); if(withFx){ ringRipple(ev.at[0],ev.at[1],0xf0dca6); flash(ev.title, ev.sub); } }
+  else if(ev.type==="note") noteMark(ev.title, ev.sub, ev.at[0], ev.at[1]);
+  else if(ev.type==="victory"){ victoryMark(ev.title, ev.sub, ev.at[0], ev.at[1]); if(withFx) ringRipple(ev.at[0],ev.at[1],0xf0dca6); }
+  else if(ev.type==="feint"){ if(withFx){ feintArrow(ev.at, ev.to, ev.title, ev.sub); flash(ev.title, ev.sub); } }
+  else if(ev.type==="alarm"){ if(withFx){ alarmRing(ev.at[0],ev.at[1]); flash(ev.title, ev.sub); } }
+  if(boostOn) setBoost(true);
+}
+function flash(main, sub){
+  const f=$("#flash");
+  f.querySelector(".f-main").textContent=main;
+  f.querySelector(".f-sub").textContent=sub;
+  f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+}
+
+/* ================= 状态机 / 面板 ================= */
+let playing=false, speed=1, phase=0, tLocal=0, ended=false, started=false;
+let firedFlags=[], computedPhase=-1, perfNow=0;
+let viewMode="map"; /* map=上帝视角(俯视地图) / cine=电影跟随 / free=自由 */
+
+function renderCard(p){
+  const inner=$("#nInner");
+  inner.classList.add("out");
+  setTimeout(()=>{
+    inner.innerHTML=`
+      <div class="n-dates">${p.card.date}</div>
+      <div class="n-title">${p.card.title}</div>
+      <div class="n-body">${p.card.body.map(t=>`<p>${t}</p>`).join("")}</div>
+      <div class="n-quote">${p.card.quote}</div>
+      <div class="n-enemy">${p.card.enemy}</div>`;
+    inner.classList.remove("out");
+  },280);
+}
+(function buildHud(){
+  const box=$("#chips");
+  PHASES.forEach((p,i)=>{
+    const b=document.createElement("button");
+    b.className="chip"; b.type="button";
+    b.innerHTML=(p.no?`<span class="no">${p.no}</span>`:"")+p.chip;
+    b.addEventListener("click",()=>seek(i));
+    box.appendChild(b);
+  });
+  const track=$("#progressTrack");
+  PHASES.forEach((p,i)=>{
+    const seg=document.createElement("div");
+    seg.className="seg"; seg.style.flex=p.dur;
+    seg.innerHTML="<i></i>";
+    seg.addEventListener("click",()=>seek(i));
+    track.appendChild(seg);
+  });
+})();
+function setChips(i){ document.querySelectorAll(".chip").forEach((c,j)=>c.classList.toggle("active",j===i)); }
+
+function applyPhaseVisual(i){
+  for(let j=0;j<routeObjs.length;j++){
+    const r=routeObjs[j]; if(!r) continue;
+    if(j<i){ r.mesh.visible=true; r.glow.visible=false; r.mesh.material.opacity=0.3; r.mesh.geometry.setDrawRange(0,Infinity); }
+    else if(j===i){ r.mesh.visible=true; r.glow.visible=true; r.mesh.material.opacity=0.95; r.mesh.geometry.setDrawRange(0,Math.floor(0*tubIdx(r))); }
+    else { r.mesh.visible=false; r.glow.visible=false; }
+  }
+  /* 重建历史标记 */
+  while(markLayer.children.length) markLayer.remove(markLayer.children[0]);
+  for(let j=0;j<i;j++){
+    PHASES[j].events.forEach(ev=>{
+      if(ev.type==="battle") battleMark(ev.title,ev.sub,ev.at[0],ev.at[1]);
+      else if(ev.type==="cross") crossBadge(ev.n,ev.at[0],ev.at[1]);
+      else if(ev.type==="note") noteMark(ev.title,ev.sub,ev.at[0],ev.at[1]);
+      else if(ev.type==="victory") victoryMark(ev.title,ev.sub,ev.at[0],ev.at[1]);
+    });
+  }
+  markLayer.children.forEach(c=>{ c.traverse&&c.traverse(o=>{ if(o.material) o.material.transparent=true, o.material.opacity=Math.min(o.material.opacity??1,0.75); }); });
+  clearFx(); clearEnemies();
+  PHASES[i].enemies.forEach(addEnemyColumn);
+  /* 历史章节留下的静态防线（川军长江防线等） */
+  while(histLayer.children.length) histLayer.remove(histLayer.children[0]);
+  for(let j=0;j<i;j++){
+    PHASES[j].enemies.forEach(en=>{ if(en.type==="line"){ histLayer.add(lineFromLons(en.pts,0xe8f0f7,{opacity:0.28,lift:0.5})); } });
+  }
+}
+function tubIdx(r){ return r.tub*6*6; }
+
+function setPhase(i, keepT){
+  phase=i; tLocal=keepT||0;
+  firedFlags[i]=[];
+  if(computedPhase!==i){ computedPhase=i; }
+  applyPhaseVisual(i);
+  setRedFormation(i);
+  renderCard(PHASES[i]);
+  setChips(i);
+  $("#dateReadout").textContent="1935."+PHASES[i].dates.split(" — ")[0].replace("1935.","");
+  if(boostOn) setBoost(true);
+  $("#ending").classList.add("hide"); ended=false;
+}
+function seek(i){ started=true; setPhase(i); if(!playing) togglePlay(true); }
+
+function togglePlay(force){
+  playing = force!==undefined ? force : !playing;
+  $("#playBtn").textContent = playing ? "暂 停" : "播 放";
+}
+$("#playBtn").addEventListener("click",()=>togglePlay());
+$("#speedBtn").addEventListener("click",function(){
+  speed = speed===1?1.6 : speed===1.6?2.4 : 1;
+  this.textContent="速度 "+speed+"×";
+});
+const followBtn=$("#followBtn");
+function syncViewBtn(){
+  followBtn.textContent = viewMode==="map" ? "上帝视角" : viewMode==="cine" ? "跟随视角" : "自由视角";
+  followBtn.classList.toggle("on", viewMode!=="free");
+}
+followBtn.addEventListener("click",()=>{
+  viewMode = (viewMode==="map") ? "cine" : "map";
+  smoothInit=false;
+  setBoost(viewMode==="map");
+  syncViewBtn();
+});
+canvas.addEventListener("pointerdown",()=>{
+  if(viewMode!=="free"){ viewMode="free"; setBoost(false); syncViewBtn(); }
+});
+document.addEventListener("keydown",e=>{
+  if(e.code==="Space"){ e.preventDefault(); togglePlay(); }
+  if(e.code==="ArrowRight") seek(Math.min(PHASES.length-1,phase+1));
+  if(e.code==="ArrowLeft") seek(Math.max(0,phase-1));
+});
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+/* 上帝视角下精灵标记放大（远景可读），切回近景还原 */
+let boostOn=false;
+const BOOST=2.8;
+function setBoost(on){
+  boostOn=on;
+  worldGroup.traverse(o=>{
+    if(o.isSprite){
+      if(on && !o.userData.b){ o.scale.multiplyScalar(BOOST); o.userData.b=true; }
+      else if(!on && o.userData.b){ o.scale.divideScalar(BOOST); o.userData.b=false; }
+    }
+  });
+}
+
+/* 上帝视角机位：每章聚焦战场、正北俯视，章节间平滑滑动、章内固定 */
+const mapCur={tx:0,ty:0,tz:0,h:300};
+let mapCurInit=false;
+function mapPoseOf(p){
+  const clon=p.mapCam.t[0], clat=p.mapCam.t[1];
+  const h=Math.max(180, p.mapCam.span)/(2*Math.tan(camera.fov*Math.PI/360))*1.06;
+  const [tx,tz]=lonLat2xy(clon,clat);
+  const ty=heightFinal(clon,clat)*EXAG;
+  return {tx,ty,tz,h};
+}
+
+/* 讲解卡/图例随红军位置自动换边：红军走到屏幕左侧时，卡片滑到右侧，避免遮挡 */
+let hudSide="left";
+function updateHudSide(){
+  if(innerWidth<980) return;
+  const v=comet.position.clone().project(camera);
+  if(!isFinite(v.x)) return;
+  const sx=(v.x+1)/2;
+  let want=hudSide;
+  if(hudSide==="left" && sx<0.40) want="right";
+  else if(hudSide==="right" && sx>0.60) want="left";
+  if(want!==hudSide){
+    hudSide=want;
+    const card=$("#narration"), lg=$("#legend");
+    if(want==="right"){
+      card.style.transform="translateX("+(innerWidth-48-card.offsetWidth)+"px)";
+      lg.style.transform="translateX(-"+(innerWidth-48-lg.offsetWidth)+"px)";
+    }else{
+      card.style.transform="none";
+      lg.style.transform="none";
+    }
+  }
+}
+
+/* 摄像机 */
+const camTmp=new THREE.Vector3(), tgtTmp=new THREE.Vector3();
+const followTgt=new THREE.Vector3(0,0,0);
+let followInit=false;
+/* 稳定跟随：指数平滑的注视点，滤掉地形起伏带来的高频抖动 */
+const smoothPos=new THREE.Vector3(0,0,0);
+let smoothInit=false;
+function camPose(spec){
+  const [tx,tz]=lonLat2xy(spec.t[0],spec.t[1]);
+  const ty=heightFinal(spec.t[0],spec.t[1])*EXAG;
+  const azR=spec.az*Math.PI/180, elR=spec.el*Math.PI/180;
+  const h=Math.max(14,spec.h);
+  return {
+    pos:new THREE.Vector3(tx+h*Math.cos(elR)*Math.sin(azR), ty+h*Math.sin(elR)+1.5, tz+h*Math.cos(elR)*Math.cos(azR)),
+    target:new THREE.Vector3(tx,ty+2,tz)
+  };
+}
+function applyCam(cx,cy,z){ /* 兼容旧调用（未用） */ }
+
+/* 主循环 */
+const clock=new THREE.Clock();
+/* 离线录制：虚拟时间源（渲染速度慢时也能得到正确流畅的动画） */
+let __vt=null;          /* 虚拟时间（秒）；null 表示使用真实时钟 */
+let __lastVT=null;
+let __dtOverride=null;  /* 离线录制的固定步长 */
+function tick(){
+  requestAnimationFrame(tick);
+  try{
+  const rawDt=__dtOverride!==null?__dtOverride:Math.min(0.1, clock.getDelta());
+  const dt=rawDt*speed;
+  perfNow+=Math.max(0.0001,clock.getDelta?0:0); /* noop */
+  perfNow+= 0; /* 使用真实时间 */
+  if(__vtMode){
+    /* 离线录制：虚拟时钟模式，帧间步长恒定（渲染慢也不影响动画流畅度） */
+    if(__vt!==null){
+      const step=(__lastVT===null)?0.0333:Math.min(0.05, __vt-__lastVT);
+      __lastVT=__vt;
+      perfNow=__vt;
+      __dtOverride=step;
+    } else {
+      perfNow=clock.elapsedTime;
+      __dtOverride=null;
+    }
+  } else {
+    perfNow=clock.elapsedTime;
+    __dtOverride=null;
+  }
+  const p=PHASES[phase];
+
+  if(playing && started){
+    if(!battleHolding()){
+      tLocal+=dt/p.dur;
+      if(tLocal>=1){
+        if(phase<PHASES.length-1){ setPhase(phase+1); }
+        else{
+          playing=false; $("#playBtn").textContent="播 放";
+          ended=true;
+          setTimeout(()=>{ if(ended) $("#ending").classList.remove("hide"); },2200);
+        }
+      }
+    }
+  }
+  const tt=Math.min(1,tLocal);
+  const r=routeObjs[phase];
+  if(r){
+    const drawn=tt;
+    const seg=Math.max(1, Math.floor(drawn*r.tub));
+    r.mesh.geometry.setDrawRange(0, seg*6*6);
+    r.glow.geometry.setDrawRange(0, seg*6*6);
+    const pos=r.curve.getPointAt(Math.max(0.001,drawn));
+    comet.position.copy(pos).add(new THREE.Vector3(0,1.1,0));
+    cometLight.position.copy(comet.position).add(new THREE.Vector3(0,2.5,0));
+    comet.userData.ring.rotation.z=perfNow*1.4;
+    const rs=comet.userData.ring.scale; const pk=1+0.15*Math.sin(perfNow*4);
+    rs.set(pk,pk,1);
+    /* 行军足迹：沿路径依次点亮的地面标记，随行军推进并渐隐 */
+    trailDots.forEach((d,i)=>{
+      const off=(i+1)*0.008;
+      const q=r.curve.getPointAt(Math.max(0.001,Math.max(0,drawn-off)));
+      d.position.copy(q).add(new THREE.Vector3(0,0.55,0));
+      d.visible=true;
+      d.material.opacity=0.42*(1-i/9);
+      d.scale.setScalar(0.55-i*0.03);
+    });
+    if(redForm){
+      const tq=r.curve.getPointAt(Math.max(0.001, Math.max(0, drawn-0.03)));
+      redForm.visible=true;
+      redForm.position.x=tq.x; redForm.position.z=tq.z;
+      redForm.userData.gy=tq.y+0.6;
+    }
+    p.events.forEach((ev,k)=>{
+      if(!firedFlags[phase][k]){
+        if(ev._t===undefined){
+          /* 事件锚点投影到路径进度 */
+          let best=0,bd=1e18;
+          for(let i=0;i<=r.SN;i++){
+            const s=r.samples[i];
+            const [ex,ez]=lonLat2xy(ev.at[0],ev.at[1]);
+            const dd=(s.x-ex)**2+(s.z-ez)**2;
+            if(dd<bd){bd=dd;best=i;}
+          }
+          ev._t=best/r.SN;
+        }
+        if(drawn>=ev._t-0.004){ firedFlags[phase][k]=true; fireEvent(ev,true); }
+      }
+    });
+  } else {
+    const [x,z]=lonLat2xy(C.zunyi[0],C.zunyi[1]);
+    const zy=heightFinal(C.zunyi[0],C.zunyi[1])*EXAG;
+    comet.position.set(x, zy+1.2, z);
+    cometLight.position.copy(comet.position).add(new THREE.Vector3(0,2.5,0));
+    trailDots.forEach(d=>d.visible=false);
+    if(redForm){
+      redForm.visible=true;
+      redForm.position.x=x+9; redForm.position.z=z+3;
+      redForm.userData.gy=zy+0.6;
+    }
+  }
+  updateEnemies(Math.min(1,tt));
+  updateBattleFade();
+  updateFormations();
+  /* 动画帧（涟漪/箭羽/告警/水面流动） */
+  for(let i=anims.length-1;i>=0;i--){ if(!anims[i].update(dt)) anims.splice(i,1); }
+  for(const wf of waterFlows){ wf.tex.offset.y -= 0.0022*wf.speed; }
+
+  /* 摄像机 */
+  if(ended){
+    /* 终幕：画面完全静止（不旋转、不移动） */
+  } else if(viewMode!=="free" && started){
+    /* 上帝视角：每章聚焦战场、章内机位固定；电影模式：跟随运镜 */
+    let desired, lookP;
+    if(viewMode==="map"){
+      if(!mapCurInit){ Object.assign(mapCur, mapPoseOf(p)); mapCurInit=true; }
+      const mp=mapPoseOf(p);
+      /* 镜头滑行：指数跟随 + 速度上限（避免出现"急加速—急减速"的尖峰位移） */
+      const aG=1-Math.exp(-2.6*rawDt);
+      /* 每帧最大位移上限：约 3.2 单位/帧(30fps)，使推拉呈匀速渐进而非脉冲 */
+      const MAXV=2.6;
+      const glide=(v,t)=>{
+        const step=(t-v)*aG;
+        return v + Math.max(-MAXV, Math.min(MAXV, step));
+      };
+      mapCur.tx=glide(mapCur.tx,mp.tx); mapCur.ty=glide(mapCur.ty,mp.ty);
+      mapCur.tz=glide(mapCur.tz,mp.tz); mapCur.h=glide(mapCur.h,mp.h);
+      /* 战斗聚焦：推近战场，结束后平滑回到章节窗口。
+         目标机位也经速度上限跟随，避免高度骤变造成的画面跳动 */
+      const bf=battleFocusPose();
+      let elDeg=89.6;
+      if(bf){
+        const MAXB=2.6;
+        const lim=(v,t)=>v+Math.max(-MAXB,Math.min(MAXB,(t-v)*aG));
+        mapCur.tx=lim(mapCur.tx,bf.tx); mapCur.ty=lim(mapCur.ty,bf.ty);
+        mapCur.tz=lim(mapCur.tz,bf.tz); mapCur.h=lim(mapCur.h,bf.h);
+        /* 战斗时改为固定斜俯视（方位不变，仅俯角变化——非旋转） */
+        elDeg=89.6-(89.6-56)*bf.focus;
+      }
+      const elR=elDeg*Math.PI/180;
+      desired=new THREE.Vector3(mapCur.tx, mapCur.ty+mapCur.h*Math.sin(elR)+1.5, mapCur.tz+mapCur.h*Math.cos(elR));
+      lookP=new THREE.Vector3(mapCur.tx,mapCur.ty,mapCur.tz);
+      scene.fog.near=mapCur.h*1.15; scene.fog.far=mapCur.h*4.2;
+    } else {
+      if(!smoothInit){ smoothPos.copy(comet.position); smoothInit=true; }
+      smoothPos.lerp(comet.position, 1-Math.exp(-4.5*rawDt));
+      const k=easeIO(tt);
+      const az=20; /* 方位角固定，不旋转 */
+      const el=p.cam.from.el+(p.cam.to.el-p.cam.from.el)*k;
+      const h=Math.max(16, p.cam.from.h+(p.cam.to.h-p.cam.from.h)*k);
+      const azR=az*Math.PI/180, elR=el*Math.PI/180;
+      desired=new THREE.Vector3(
+        smoothPos.x+h*Math.cos(elR)*Math.sin(azR),
+        smoothPos.y+h*Math.sin(elR)+1.5,
+        smoothPos.z+h*Math.cos(elR)*Math.cos(azR));
+      lookP=smoothPos;
+      scene.fog.near=320; scene.fog.far=980;
+    }
+    /* 机位与注视点同源（mapCur / smoothPos）并同步赋值：
+       若位置与目标各自异步收敛，视线方向会瞬时偏摆（形似旋转）；
+       直接取值则视角方向任何时刻恒定，只剩纯平移与缩放 */
+    camera.position.copy(desired);
+    controls.target.copy(lookP);
+    camera.lookAt(lookP);
+  } else {
+    controls.update();
+  }
+  updateHudSide();
+
+  /* 进度条 */
+  let done=0; for(let j=0;j<phase;j++) done+=PHASES[j].dur;
+  const gP=(done+tt*p.dur)/TOTAL_DUR;
+  document.querySelectorAll("#progressTrack .seg i").forEach((bar,j)=>{
+    const fill=Math.max(0,Math.min(1,(gP*TOTAL_DUR-PHASES.slice(0,j).reduce((s,q)=>s+q.dur,0))/PHASES[j].dur));
+    bar.style.width=(fill*100)+"%";
+  });
+  renderer.render(scene,camera);
+  }catch(e){
+    const eb=document.getElementById("err");
+    if(eb){ eb.classList.remove("hide"); eb.textContent="运行错误: "+(e&&e.stack?e.stack:e); }
+  }
+}
+
+/* ================= 离线录制接口 =================
+   以固定步长的虚拟时钟驱动动画，逐帧渲染到 canvas，
+   使成片帧率与动画流畅度不受本机渲染性能影响。 */
+window.__offline={
+  /* 进入离线模式：接管时钟 */
+  begin(){
+    playing=false; started=true; ended=false;
+    $("#cover").classList.add("hide");
+    setPhase(0);
+    playing=true; $("#playBtn").textContent="暂 停";
+    __offlineT=0; __lastVT=null;
+    __vtMode=true;
+  },
+  /* 推进到指定虚拟时刻并渲染一帧 */
+  renderAt(t){
+    __vt=t;
+    tick();
+  },
+  get time(){ return __offlineT; },
+  /* 相机探针：用于量化检测镜头跳变（相邻帧位移不应突变） */
+  probe(){
+    return {
+      x:camera.position.x, y:camera.position.y, z:camera.position.z,
+      tx:controls.target.x, tz:controls.target.z,
+      ph:phase, tl:tLocal, bf:!!battleFocus
+    };
+  }
+};
+let __offlineT=0;
+let __vtMode=false;
+
+/* 中国战区定位小地图 */
+(function chinaInset(){
+  const cv=document.getElementById("chinaCanvas");
+  if(!cv) return;
+  const ctx=cv.getContext("2d");
+  const W=cv.width, H=cv.height;
+  const LON_A=72.5, LON_B=136.5, LAT_A=17.0, LAT_B=54.5;
+  const sx=lon=>(lon-LON_A)/(LON_B-LON_A)*W;
+  const sy=lat=>H-(lat-LAT_A)/(LAT_B-LAT_A)*H;
+  /* 简化中国轮廓（定位示意用） */
+  const CN=[[73.8,39.3],[75.0,40.6],[76.2,41.6],[78.2,43.2],[80.3,45.0],[82.6,45.6],[84.6,47.2],[87.4,49.1],[90.9,47.9],[93.5,45.1],[96.3,42.8],[100.0,42.6],[104.0,41.6],[107.0,42.4],[110.0,42.7],[112.0,45.0],[114.5,45.4],[117.5,46.6],[119.7,46.7],[119.9,47.7],[121.0,50.2],[122.5,52.8],[125.0,53.2],[126.5,52.8],[127.5,50.3],[130.6,48.9],[134.3,48.4],[133.1,45.1],[131.3,43.4],[130.6,42.9],[128.0,42.0],[126.0,41.0],[124.3,39.9],[122.2,39.5],[121.2,38.9],[120.7,38.0],[122.5,37.2],[119.2,35.1],[119.3,34.8],[120.9,32.7],[121.9,31.0],[121.4,28.4],[120.2,27.0],[118.4,24.5],[116.5,23.3],[114.2,22.5],[110.5,21.2],[109.1,21.5],[108.5,21.6],[106.7,22.8],[104.8,22.9],[103.9,22.5],[101.8,22.4],[101.1,21.2],[99.2,22.1],[97.5,23.9],[97.9,25.3],[98.7,27.5],[96.4,28.4],[95.4,29.0],[92.1,27.7],[89.1,27.3],[88.8,28.0],[85.8,28.2],[82.0,30.3],[78.9,32.5],[78.2,34.6],[76.0,35.5],[74.9,37.0]];
+  const YZV=[[104.6,28.8],[106.5,29.6],[108.8,30.5],[111.0,30.7],[114.3,30.6],[117.0,30.5],[118.8,32.0],[121.9,31.0]]; /* 长江 */
+  (function draw(t){
+    ctx.clearRect(0,0,W,H);
+    ctx.beginPath();
+    CN.forEach((p,i)=> i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));
+    ctx.closePath();
+    ctx.fillStyle="rgba(70,95,125,0.22)"; ctx.fill();
+    ctx.strokeStyle="rgba(150,180,210,0.60)"; ctx.lineWidth=1.2; ctx.stroke();
+    [[121.0,23.7,1.5,1.7],[109.8,19.2,1.9,1.6]].forEach(([lo,la,rw,rh])=>{
+      ctx.beginPath();
+      ctx.ellipse(sx(lo),sy(la),rw/(LON_B-LON_A)*W, rh/(LAT_B-LAT_A)*H, 0,0,7);
+      ctx.fillStyle="rgba(70,95,125,0.22)"; ctx.fill();
+      ctx.strokeStyle="rgba(150,180,210,0.5)"; ctx.stroke();
+    });
+    ctx.beginPath();
+    YZV.forEach((p,i)=> i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));
+    ctx.strokeStyle="rgba(90,150,200,0.5)"; ctx.lineWidth=1; ctx.stroke();
+    const x1=sx(101.9), y1=sy(30.4), x2=sx(108.2), y2=sy(24.5);
+    ctx.strokeStyle="rgba(255,90,74,0.95)"; ctx.lineWidth=1.8;
+    ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    const px=sx(105.4), py=sy(27.6), k=(t*0.0011)%1;
+    ctx.beginPath(); ctx.arc(px,py,2.5+9*k,0,7);
+    ctx.strokeStyle="rgba(255,90,74,"+(0.85*(1-k))+")"; ctx.lineWidth=1.6; ctx.stroke();
+    ctx.beginPath(); ctx.arc(px,py,2.8,0,7); ctx.fillStyle="#ff5a48"; ctx.fill();
+    ctx.font='16px "Microsoft YaHei",sans-serif';
+    ctx.fillStyle="rgba(240,220,166,0.95)";
+    ctx.fillText("黔北·赤水河", x2-2, y2+18);
+    requestAnimationFrame(draw);
+  })(0);
+})();
+
+/* 火星粒子（保留氛围） */
+(function particles(){
+  const cv=$("#fxCanvas"), ctx=cv.getContext("2d");
+  let W,H;
+  function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
+  addEventListener("resize",resize); resize();
+  const P=[];
+  for(let i=0;i<55;i++) P.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+.4,s:Math.random()*13+6,a:Math.random()*.4+.08,w:Math.random()*6.28});
+  (function loop(){
+    ctx.clearRect(0,0,W,H);
+    P.forEach(p=>{
+      p.w+=0.02; p.x+=Math.sin(p.w)*0.3-p.s*0.05; p.y-=p.s*0.11;
+      if(p.y<-5){p.y=H+5;p.x=Math.random()*W;}
+      if(p.x<-5)p.x=W+5;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3);
+      g.addColorStop(0,`rgba(255,170,110,${p.a})`); g.addColorStop(1,"rgba(255,120,60,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*3,0,6.29); ctx.fill();
+    });
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* ================= 启动 ================= */
+$("#startBtn").addEventListener("click",()=>{
+  $("#cover").classList.add("hide");
+  started=true;
+  setTimeout(()=>{ setPhase(0); togglePlay(true); },400);
+});
+$("#replayBtn").addEventListener("click",()=>{
+  $("#ending").classList.add("hide"); ended=false;
+  firedFlags=[];
+  setPhase(0); togglePlay(true);
+});
+setTimeout(()=>{ $("#barRed").style.width="9%"; $("#barBlue").style.width="91%"; },600);
+/* 兵力面板与封面：用小兵阵列表达规模，不出现数字 */
+soldierRow($("#stRed"), 3.7, true);
+soldierRow($("#stBlue"), 40, false);
+soldierRow($("#fcRed"), 3.7, true);
+soldierRow($("#fcBlue"), 40, false);
+
+(async function boot(){
+  $("#loading").classList.remove("hide");
+  try{
+  await new Promise(r=>setTimeout(r,60));
+  const ok=await loadDEM();
+  buildTerrain();
+  buildBase();
+  buildRoutes();
+  setPhase(0);
+  playing=false;
+  /* 初始机位：上帝视角·序幕聚焦窗口 */
+  {
+    Object.assign(mapCur, mapPoseOf(PHASES[0])); mapCurInit=true;
+    const elR=89.6*Math.PI/180;
+    camera.position.set(mapCur.tx, mapCur.ty+mapCur.h*Math.sin(elR)+1.5, mapCur.tz+mapCur.h*Math.cos(elR));
+    controls.target.set(mapCur.tx,mapCur.ty,mapCur.tz);
+    camera.lookAt(controls.target);
+    scene.fog.near=mapCur.h*1.15; scene.fog.far=mapCur.h*4.2;
+  }
+  setBoost(true);
+  tick();
+  $("#loading").classList.add("hide");
+  $("#cover").classList.remove("hide");
+  }catch(e){
+    const eb=document.getElementById("err");
+    if(eb){ eb.classList.remove("hide"); eb.textContent="初始化错误: "+(e&&e.stack?e.stack:e); }
+  }
+})();
+})();
+</script>
+</body>
+</html>
